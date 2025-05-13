@@ -1,7 +1,38 @@
 import pytest
+from datetime import date
 
-import grabbers.companies
+from edgar import Company, get_by_accession_number
+from edgar.xbrl.xbrl import XBRL
+
+from common.parse import Quarterly
+
+# @pytest.mark.integration
+# def test_get_eps():
+#     nvda_cik = 1045810
+#     nvda_co = Company(nvda_cik)
+#     ten_k = nvda_co.get_filings(form="10-K").latest()
+#     xlbr = XBRL.from_filing(ten_k)
+#     facts = xlbr.facts.to_dataframe()
+#     fact_keys = [
+#         'us-gaap_EarningsPerShareDiluted_c-1',
+#         'us-gaap_EarningsPerShareDiluted_c-11',
+#         'us-gaap_EarningsPerShareDiluted_c-12'
+#     ]
+#     eps_df = facts[facts['fact_key'].isin(fact_keys)]
+#     print("break")
+
+@pytest.fixture
+def ten_q():
+    nvda_2024_03 = "0001045810-24-000316"
+    ten_q_2024_03 = get_by_accession_number(nvda_2024_03)
+    return ten_q_2024_03
+
+@pytest.fixture
+def quarterly_instance():
+    nvda_2024_03 = "0001045810-24-000316"
+    return Quarterly(nvda_2024_03)
 
 @pytest.mark.integration
-def test_sec():
-    companies = grabbers.companies.sec()
+def test_get_end_date(quarterly_instance):
+    quarterly_instance.get_end_date()
+    assert quarterly_instance.end_date == date.fromisoformat("2024-10-27")
