@@ -29,5 +29,5 @@ def quarterly_instance():
 
 @pytest.mark.integration
 def test_get_revenue(quarterly_instance):
-    quarterly_instance.get_date_range()
+    quarterly_instance.get_revenue()
     assert quarterly_instance.revenue == 35082000000
