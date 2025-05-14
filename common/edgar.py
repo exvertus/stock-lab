@@ -1,7 +1,6 @@
 from datetime import date, timedelta
 import pandas as pd
 
-from edgar.entity.filings import EntityFiling
 from edgar.xbrl.xbrl import XBRL
 
 from common.shared import inspect_dir
@@ -14,34 +13,48 @@ class QuarterlyData():
 
         self.period_start_cutoff = self.period_end_date - timedelta(98)
 
-        self.start_date = date.fromisoformat('1000-01-01')
-        self.end_date = date.fromisoformat('1000-01-01')
-        self.revenue = 0
-        self.eps = 0
-        self.profit_margin = 0.0
-        self.free_cash_flow = 0
-        self.shares = 0
+        # Raw values
+        self.revenue = None
+        self.eps = None
+        self.shares = None
+        self.operating_cash_flow = None
+        self.cap_ex = None
 
-    def export_facts(self):
-        # TODO: Add url to head of csv
-        self.facts_df.to_csv(inspect_dir / f"{self.accession_number}.csv")
+        # Calculated
+        self.free_cash_flow = None
+        self.profit_margin = None
+
+    def _get_concept_within_dates(self, concept):
+        concept_rows = self.facts_df.loc[
+            (self.facts_df["concept"] == concept) & 
+            (self.facts_df["period_start"] > str(self.period_start_cutoff)) &
+            (self.facts_df["period_end"] == str(self.period_end_date)), 
+            ["fact_key", "value", "unit_ref", "period_start", "period_end", "label"]
+        ]
+        return pd.to_numeric(concept_rows["value"]).max()
 
     def get_revenue(self):
-        revenue_rows = self.facts_df.loc[
-            (self.facts_df["concept"] == "us-gaap:Revenues") & 
-            (self.facts_df["period_start"] >= str(self.period_start_cutoff)) &
-            (self.facts_df["period_end"] == str(self.period_end_date)), 
-            ["fact_key", "value", "unit_ref", "period_start", "period_end", "label"]]
-        self.revenue = pd.to_numeric(revenue_rows["value"]).max()
+        # TODO: Revenue per share instead?
+        self.revenue = self._get_concept_within_dates("us-gaap:Revenues")
 
     def get_eps(self):
+        self.eps = self._get_concept_within_dates("us-gaap:EarningsPerShareDiluted")
+
+    def get_shares_outstanding(self):
+        self.shares = self._get_concept_within_dates("us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding")
+
+    def get_operating_cash_flow(self):
+        pass
+    
+    def get_free_cash_flow(self):
         pass
 
     def get_profit_margin(self):
         pass
 
-    def get_free_cash_flow(self):
-        pass
+    def export_facts(self):
+        # TODO: Add url to head of csv
+        self.facts_df.to_csv(inspect_dir / f"{self.accession_number}.csv")
     
 class TenQData(QuarterlyData):
     pass
