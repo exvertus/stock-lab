@@ -4,7 +4,7 @@ from datetime import date
 from edgar import Company, get_by_accession_number
 from edgar.xbrl.xbrl import XBRL
 
-from common.parse import Quarterly
+from common.edgar import QuarterlyData
 
 # @pytest.mark.integration
 # def test_get_eps():
@@ -22,17 +22,12 @@ from common.parse import Quarterly
 #     print("break")
 
 @pytest.fixture
-def ten_q():
-    nvda_2024_03 = "0001045810-24-000316"
-    ten_q_2024_03 = get_by_accession_number(nvda_2024_03)
-    return ten_q_2024_03
-
-@pytest.fixture
 def quarterly_instance():
-    nvda_2024_03 = "0001045810-24-000316"
-    return Quarterly(nvda_2024_03)
+    nvda_2024_Q3 = "0001045810-24-000316"
+    nvda_2024_Q3_filing = get_by_accession_number(nvda_2024_Q3)
+    return QuarterlyData(nvda_2024_Q3_filing)
 
 @pytest.mark.integration
-def test_get_end_date(quarterly_instance):
-    quarterly_instance.get_end_date()
-    assert quarterly_instance.end_date == date.fromisoformat("2024-10-27")
+def test_get_revenue(quarterly_instance):
+    quarterly_instance.get_date_range()
+    assert quarterly_instance.revenue == 35082000000
