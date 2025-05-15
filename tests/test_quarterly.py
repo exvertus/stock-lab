@@ -3,7 +3,7 @@ import pytest
 from pathlib import Path
 from edgar import get_by_accession_number, Filing
 
-from common.edgar import QuarterlyData
+from stock_lab.old import QuarterlyData
 
 # @pytest.mark.integration
 # def test_get_eps():
@@ -26,26 +26,27 @@ def data_directory():
     return here / "data"
 
 @pytest.fixture
-def local_nvda_ten_q(data_directory):
+def local_quarterly(data_directory):
     local_path = data_directory / "nvda_ten_q0001045810-24-000316.pkl"
-    return Filing.load(local_path)
-
-@pytest.mark.integration
-def test_get_revenue(quarterly_instance):
-    quarterly_instance.get_revenue()
-    assert quarterly_instance.revenue == 35082000000
-
-@pytest.mark.integration
-def test_get_eps(quarterly_instance):
-    quarterly_instance.get_eps()
-    assert quarterly_instance.eps == 0.78
-
-def test_shares_outstanding(quarterly_instance):
-    quarterly_instance.get_shares_outstanding()
-    assert quarterly_instance.shares == 24774000000
+    nvda_2024_Q3_filing = Filing.load(local_path)
+    return QuarterlyData(nvda_2024_Q3_filing)
 
 @pytest.fixture
-def quarterly_instance():
+def remote_quarterly():
     nvda_2024_Q3 = "0001045810-24-000316"
     nvda_2024_Q3_filing = get_by_accession_number(nvda_2024_Q3)
     return QuarterlyData(nvda_2024_Q3_filing)
+
+def test_get_revenue(local_quarterly):
+    local_quarterly.get_revenue()
+    assert local_quarterly.revenue == 35082000000
+
+def test_get_eps(local_quarterly):
+    local_quarterly.get_eps()
+    assert local_quarterly.eps == 0.78
+
+def test_shares_outstanding(local_quarterly):
+    local_quarterly.get_shares_outstanding()
+    assert local_quarterly.shares == 24774000000
+
+

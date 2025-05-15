@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 from edgar import Company
 from edgar.reference.tickers import get_company_tickers
 
-from common.edgar import QuarterlyData
+from stock_lab.old import QuarterlyData
 
 load_dotenv()
 
