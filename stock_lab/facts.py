@@ -12,7 +12,7 @@ class InvalidFact(Exception):
 
 class FilingFacts():
     """
-    Raw, uncalculated, data pulled from a single filing's XBRL.
+    Raw, uncalculated, data pulled from a single quarterly filing (10-Q, 10-K).
     """
     gaap_tags = {
         "revenue": (
@@ -55,6 +55,8 @@ class FilingFacts():
 
     def __init__(self, filing):
         self.filing = filing
+
+    def parse(self):
         self.facts_df = XBRL.from_filing(self.filing).facts.to_dataframe()
         self.rows = self.get_rows()
         self.validate()
@@ -78,8 +80,13 @@ class FilingFacts():
         return all_rows
     
     @staticmethod
-    def data_missing(rows):
-        return rows is None or rows["value"].replace("", pd.NA).isna().all()
+    def data_missing(df):
+        """True if df is empty or has nil values."""
+        if df is None or df.empty:
+            return True
+        if "value" not in df.columns:
+            return True
+        return df["value"].replace("", pd.NA).isna().all()
 
     def _seek_tags_until_found(self, gaap_tags):
         """
@@ -104,5 +111,4 @@ class FilingFacts():
 
     def validate(self):
         # End dates should all be the same.
-        # Revenue >= 0
         pass
