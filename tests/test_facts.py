@@ -1,6 +1,7 @@
 import pytest
-
 import pandas as pd
+
+from edgar.xbrl.xbrl import XBRL
 
 import stock_lab.utils
 from stock_lab.facts import FilingFacts
@@ -43,6 +44,22 @@ def test_data_missing_returns_false():
     })
     assert not FilingFacts.data_missing(df)
 
+def test_get_for_latest_end_dates():
+    df_in = pd.DataFrame({
+        "concept": ["us-gaap:Revenues", "us-gaap:Revenues", "us-gaap:CostOfRevenue"],
+        "value": ["3000", "2000", "1000"],
+        "period_end": ["2024-10-27", "2024-01-29", "2024-11-27"]
+    })
+    df_expected = pd.DataFrame({
+        "concept": ["us-gaap:Revenues"],
+        "value": ["3000"],
+        "period_end": ["2024-10-27"]
+    })
+    ff = FilingFacts(df_in)
+    actual_df = ff.get_for_latest_end_dates("us-gaap:Revenues")
+    pd.testing.assert_frame_equal(
+        actual_df.reset_index(drop=True), df_expected.reset_index(drop=True))
+
 # ------------- Integration tests -------------
 
 @pytest.fixture
@@ -64,12 +81,10 @@ def nvda_ten_q():
 
 @pytest.mark.integration
 def test_filings_facts_ten_q(nvda_ten_q):
-    FilingFacts(nvda_ten_q)
+    ten_q_df = XBRL.from_filing(nvda_ten_q).facts.to_dataframe()
+    FilingFacts(ten_q_df)
 
 @pytest.mark.integration
 def test_filings_facts_ten_k(nvda_ten_k):
-    FilingFacts(nvda_ten_k)
-
-def test_muliple_quarters(nvda_quarters):
-    # Finish later...
-    pass
+    ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
+    FilingFacts(ten_k_df)

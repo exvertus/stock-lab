@@ -1,7 +1,5 @@
 import pandas as pd
 
-from edgar.xbrl.xbrl import XBRL
-
 class MissingFact(Exception):
     """Thrown when expected data is not present."""
     pass
@@ -13,6 +11,7 @@ class InvalidFact(Exception):
 class FilingFacts():
     """
     Raw, uncalculated, data pulled from a single quarterly filing (10-Q, 10-K).
+    filing_df: a dataframe from a quarterly filing.
     """
     gaap_tags = {
         "revenue": (
@@ -53,11 +52,10 @@ class FilingFacts():
         )
     }
 
-    def __init__(self, filing):
-        self.filing = filing
+    def __init__(self, filing_df):
+        self.facts_df = filing_df
 
     def parse(self):
-        self.facts_df = XBRL.from_filing(self.filing).facts.to_dataframe()
         self.rows = self.get_rows()
         self.validate()
 
@@ -81,14 +79,14 @@ class FilingFacts():
     
     @staticmethod
     def data_missing(df):
-        """True if df is empty or has nil values."""
+        """True if df is empty or values column contains all nil values."""
         if df is None or df.empty:
             return True
         if "value" not in df.columns:
             return True
         return df["value"].replace("", pd.NA).isna().all()
 
-    def _seek_tags_until_found(self, gaap_tags):
+    def seek_tags_until_found(self, gaap_tags):
         """
         Search in order of gaap_tags until at least one is found,
         short circuiting other tags when a tag finds a match.
@@ -101,13 +99,20 @@ class FilingFacts():
                 break
         return rows
 
-    def _get_for_latest_end_dates(self, tag):
+    def get_for_latest_end_dates(self, tag):
         """
         For provided tag (aka "concept"), 
         find the most recent end dates in the filing.
         Returns a dataframe with each row found.
         """
-        pass
+        concept_rows = self.facts_df.loc[
+            self.facts_df["concept"] == tag
+        ]
+        latest_end_date = concept_rows["period_end"].max()
+        result_rows = concept_rows.loc[
+            concept_rows["period_end"] == latest_end_date
+        ]
+        return result_rows
 
     def validate(self):
         # End dates should all be the same.
