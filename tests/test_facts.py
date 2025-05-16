@@ -115,6 +115,86 @@ def test_get_for_latest_end_dates(concept, df_in, df_expected):
     pd.testing.assert_frame_equal(
         actual_df.reset_index(drop=True), df_expected.reset_index(drop=True))
 
+@pytest.mark.parametrize("gaap_tags, df_in, df_expected", [
+    # Ideal case: first tag matches
+    (
+        ("us-gaap:Revenues", "us-gaap:SalesRevenueNet",),
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:SalesRevenueNet"],
+            "value": ["111", "222"],
+            "period_end": ["2024-10-27", "2024-01-01"]
+        }),
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues"],
+            "value": ["111"],
+            "period_end": ["2024-10-27"]
+        })
+    ),
+
+    # Fallback case: first tag not found
+    (
+        ["tag1", "tag2"],
+        pd.DataFrame({
+            "concept": ["tag2"],
+            "value": ["222"],
+            "period_end": ["2024-01-01"]
+        }),
+        pd.DataFrame({
+            "concept": ["tag2"],
+            "value": ["222"],
+            "period_end": ["2024-01-01"]
+        })
+    ),
+
+    # No tags match
+    (
+        ["tag1", "tag2"],
+        pd.DataFrame({
+            "concept": ["tag3"],
+            "value": ["333"],
+            "period_end": ["2024-01-01"]
+        }),
+        pd.DataFrame(columns=["concept", "value", "period_end"])
+    ),
+
+    # Multiple first-matches
+    (
+        ["tag1"],
+        pd.DataFrame({
+            "concept": ["tag1", "tag1", "tag1"],
+            "value": ["100", "200", "300"],
+            "period_end": ["2024-10-27", "2024-10-27", "2023-12-31"]
+        }),
+        pd.DataFrame({
+            "concept": ["tag1", "tag1"],
+            "value": ["100", "200"],
+            "period_end": ["2024-10-27", "2024-10-27"]
+        })
+    ),
+
+    # Missing period_end
+    (
+        ["tag1"],
+        pd.DataFrame({
+            "concept": ["tag1", "tag1"],
+            "value": ["111", "222"],
+            "period_end": ["2024-10-27", None]
+        }),
+        pd.DataFrame({
+            "concept": ["tag1"],
+            "value": ["111"],
+            "period_end": ["2024-10-27"]
+        })
+    ),
+])
+def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
+    ff = FilingFacts(df_in)
+    actual = ff.seek_tags_until_found(gaap_tags)
+    pd.testing.assert_frame_equal(
+        actual.reset_index(drop=True),
+        df_expected.reset_index(drop=True)
+    )
+
 # ------------- Integration tests -------------
 
 @pytest.fixture

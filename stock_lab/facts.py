@@ -92,11 +92,11 @@ class FilingFacts():
         short circuiting other tags when a tag finds a match.
         Returns dataframe for ALL rows for that tag with the latest end date.
         """
-        rows = []
+        rows = None
         for tag in gaap_tags:
-            rows = self._get_for_latest_end_dates(tag)
-            if rows:
-                break
+            rows = self.get_for_latest_end_dates(tag)
+            if not rows.empty:
+                return rows
         return rows
 
     def get_for_latest_end_dates(self, tag):
