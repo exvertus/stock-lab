@@ -8,55 +8,60 @@ from stock_lab.facts import FilingFacts
 
 # ---------------- Unit tests ----------------
 
-def test_data_missing_empty():
-    df_empty = pd.DataFrame()
-    df_none = None
-    assert FilingFacts.data_missing(df_empty)
-    assert FilingFacts.data_missing(df_none)
-
-def test_data_missing_no_rows():
-    df = pd.DataFrame(columns=["period_end", "value"])
-    assert FilingFacts.data_missing(df)
-
-def test_data_missing_nil_value():
-    df_none = pd.DataFrame({
+@pytest.mark.parametrize("df, expected", [
+    # Empty datafrom
+    (pd.DataFrame(), True),
+    # None object
+    (None, True),
+    # Column labels but no rows
+    (pd.DataFrame(columns=["period_end", "value"]), True),
+    # All cells in value column are None
+    (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": [None, None]
-    })
-    df_nil = pd.DataFrame({
+    }), True),
+    # All cells in value column are empty strings
+    (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": ["", ""]
-    })
-    assert FilingFacts.data_missing(df_none)
-    assert FilingFacts.data_missing(df_nil)
-
-def test_data_missing_one_missing():
-    df = pd.DataFrame({
+    }), True),
+    # All cells in value column are pd.NA
+    (pd.DataFrame({
+        "period_end": ["2025-05-16", "2020-05-16"],
+        "value": [pd.NA, pd.NA]
+    }), True),
+    # Empty strings are okay as long as a value is found
+    (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": ["234561", ""]
-    })
-    assert not FilingFacts.data_missing(df)
-
-def test_data_missing_returns_false():
-    df = pd.DataFrame({
+    }), False),
+    # The ideal scenario---legit values found in all rows
+    (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": ["3400521", "42145"]
-    })
-    assert not FilingFacts.data_missing(df)
+    }), False),
+])
+def test_data_missing(df, expected):
+    assert FilingFacts.data_missing(df) == expected
 
-def test_get_for_latest_end_dates():
-    df_in = pd.DataFrame({
+@pytest.mark.parametrize("concept, df_in, df_expected",[
+    # Ideal case: multiple rows but only one latest end_date
+    ("us-gaap:Revenues",
+     pd.DataFrame({
         "concept": ["us-gaap:Revenues", "us-gaap:Revenues", "us-gaap:CostOfRevenue"],
         "value": ["3000", "2000", "1000"],
         "period_end": ["2024-10-27", "2024-01-29", "2024-11-27"]
-    })
-    df_expected = pd.DataFrame({
+     }),
+     pd.DataFrame({
         "concept": ["us-gaap:Revenues"],
         "value": ["3000"],
         "period_end": ["2024-10-27"]
-    })
+     })
+    )
+])
+def test_get_for_latest_end_dates(concept, df_in, df_expected):
     ff = FilingFacts(df_in)
-    actual_df = ff.get_for_latest_end_dates("us-gaap:Revenues")
+    actual_df = ff.get_for_latest_end_dates(concept)
     pd.testing.assert_frame_equal(
         actual_df.reset_index(drop=True), df_expected.reset_index(drop=True))
 
