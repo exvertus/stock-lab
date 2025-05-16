@@ -11,30 +11,37 @@ from stock_lab.facts import FilingFacts
 @pytest.mark.parametrize("df, expected", [
     # Empty datafrom
     (pd.DataFrame(), True),
+
     # None object
     (None, True),
+
     # Column labels but no rows
     (pd.DataFrame(columns=["period_end", "value"]), True),
+
     # All cells in value column are None
     (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": [None, None]
     }), True),
+
     # All cells in value column are empty strings
     (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": ["", ""]
     }), True),
+
     # All cells in value column are pd.NA
     (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": [pd.NA, pd.NA]
     }), True),
+
     # Empty strings are okay as long as a value is found
     (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
         "value": ["234561", ""]
     }), False),
+
     # The ideal scenario---legit values found in all rows
     (pd.DataFrame({
         "period_end": ["2025-05-16", "2020-05-16"],
@@ -46,18 +53,61 @@ def test_data_missing(df, expected):
 
 @pytest.mark.parametrize("concept, df_in, df_expected",[
     # Ideal case: multiple rows but only one latest end_date
-    ("us-gaap:Revenues",
-     pd.DataFrame({
-        "concept": ["us-gaap:Revenues", "us-gaap:Revenues", "us-gaap:CostOfRevenue"],
-        "value": ["3000", "2000", "1000"],
-        "period_end": ["2024-10-27", "2024-01-29", "2024-11-27"]
-     }),
-     pd.DataFrame({
-        "concept": ["us-gaap:Revenues"],
-        "value": ["3000"],
-        "period_end": ["2024-10-27"]
-     })
-    )
+    (
+        "us-gaap:Revenues",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:Revenues", "us-gaap:CostOfRevenue"],
+            "value": ["2000", "3000", "1000"],
+            "period_end": ["2024-01-29", "2024-10-27", "2024-11-27"]
+        }),
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues"],
+            "value": ["3000"],
+            "period_end": ["2024-10-27"]
+        })
+    ),
+
+    # No matching concept
+    (
+        "us-gaap:NetIncomeLoss",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:CostOfRevenue"],
+            "value": ["3000", "1000"],
+            "period_end": ["2024-10-27", "2024-11-27"]
+        }),
+        pd.DataFrame(columns=["concept", "value", "period_end"])
+    ),
+
+    # Latest date "tie"
+    (
+        "us-gaap:Revenues",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
+            "value": ["3000", "4000"],
+            "period_end": ["2024-10-27", "2024-10-27"]
+        }),
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
+            "value": ["3000", "4000"],
+            "period_end": ["2024-10-27", "2024-10-27"]
+        })
+    ),
+
+    # Ignore missing period_end
+    (
+        "us-gaap:Revenues",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
+            "value": ["3000", "4000"],
+            "period_end": ["2024-10-27", None]
+        }),
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues"],
+            "value": ["3000"],
+            "period_end": ["2024-10-27"]
+        })
+    ),
+
 ])
 def test_get_for_latest_end_dates(concept, df_in, df_expected):
     ff = FilingFacts(df_in)

@@ -107,7 +107,12 @@ class FilingFacts():
         """
         concept_rows = self.facts_df.loc[
             self.facts_df["concept"] == tag
-        ]
+        ].copy()
+
+        concept_rows = concept_rows.dropna(subset=["period_end"])
+        if concept_rows.empty:
+            return concept_rows
+        
         latest_end_date = concept_rows["period_end"].max()
         result_rows = concept_rows.loc[
             concept_rows["period_end"] == latest_end_date
