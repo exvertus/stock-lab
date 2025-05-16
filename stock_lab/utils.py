@@ -31,12 +31,12 @@ def load_filings_from_dir(load_dir):
         filings.append(Filing.load(p))
     return filings
 
-def filings_facts_to_csv(filing, save_path=REPO_ROOT / ".inspect"):
+def filings_facts_to_csv(filing, save_path=REPO_ROOT/".inspect"):
     """
     Export filing fact data to a csv file.
     """
     facts_df = XBRL.from_filing(filing).facts.to_dataframe()
     if save_path.is_dir():
-        facts_df.to_csv(f"{filing.accession_no}.csv")
+        facts_df.to_csv(save_path/f"{filing.accession_no}.csv")
     else:
         facts_df.to_csv(save_path)
