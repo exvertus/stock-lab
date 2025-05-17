@@ -61,21 +61,20 @@ class FilingFacts():
 
     def get_rows(self):
         """
-        For each fact type, pull rows from the facts dataframe.
-        If no matches are found after gaap_tags are exhausted,
+        For each fact type, pull row(s) from the facts dataframe.
+        If no matches are found after gaap_tags values are exhausted,
         raise a MissingFact exception.
+        Returns dataframe of found facts for latest period_end.
         """
-        all_rows = []
-        for fact_type, tags in self.gaap_tags.items():
-            type_rows = None
-            type_rows = self._seek_tags_until_found(tags)
-            if self.data_missing(type_rows):
-                raise MissingFact(f"""Could not find a row for {fact_type}.
-                                  Nothing matched for: {tags.split(', ')}""")
-            
-            type_rows["fact_type"] = fact_type
-            all_rows.append(type_rows)
-        return all_rows
+        results_df = pd.DataFrame()
+        for fact_type, concepts in self.gaap_tags.items():
+            rows_df = self.seek_tags_until_found(concepts)
+            rows_df.insert(0, "fact_type", fact_type)
+            if results_df.empty:  
+                results_df = rows_df
+            else:
+                results_df = pd.concat([results_df, rows_df], ignore_index=True)
+        return results_df
     
     @staticmethod
     def data_missing(df):

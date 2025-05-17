@@ -195,6 +195,38 @@ def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
         df_expected.reset_index(drop=True)
     )
 
+first_concepts = [val[0] for val in FilingFacts.gaap_tags.values()]
+@pytest.mark.parametrize("filing_df, expected_df", [
+    # Ideal case: single first-matches for each tag
+    (
+        pd.DataFrame({
+            "concept": first_concepts,
+            "value": [str(i) for i in range(len(first_concepts))],
+            "period_end": ["2020-10-01"] * len(first_concepts)
+        }),
+        pd.DataFrame({
+            "fact_type": list(FilingFacts.gaap_tags.keys()),
+            "concept": first_concepts,
+            "value": [str(i) for i in range(len(first_concepts))],
+            "period_end": ["2020-10-01"] * len(first_concepts)
+        })
+    ),
+
+    # Acceptable case: last concept matches
+
+    # Single missing row for all concepts under one gaap_tags key
+    # raises exception
+
+    # Empty input dataframe raises exception
+])
+def test_get_rows(filing_df, expected_df):
+    ff = FilingFacts(filing_df)
+    actual = ff.get_rows()
+    pd.testing.assert_frame_equal(
+        actual.reset_index(drop=True),
+        expected_df.reset_index(drop=True)
+    )
+
 # ------------- Integration tests -------------
 
 @pytest.fixture
