@@ -4,7 +4,7 @@ import pandas as pd
 from edgar.xbrl.xbrl import XBRL
 
 import stock_lab.utils
-from stock_lab.facts import FilingFacts
+from stock_lab.facts import FilingFacts, MissingFact
 
 # ---------------- Unit tests ----------------
 
@@ -227,11 +227,6 @@ last_concepts = [val[-1] for val in FilingFacts.gaap_tags.values()]
             "period_end": ["2020-10-01"] * len(last_concepts)
         })
     ),
-
-    # Single missing row for all concepts under one gaap_tags key
-    # raises exception
-
-    # Empty input dataframe raises exception
 ])
 def test_get_rows(filing_df, expected_df):
     ff = FilingFacts(filing_df)
@@ -240,6 +235,30 @@ def test_get_rows(filing_df, expected_df):
         actual.reset_index(drop=True),
         expected_df.reset_index(drop=True)
     )
+
+@pytest.mark.parametrize("filing_df", [
+    # Single missing row for all concepts under one gaap_tags key
+    # raises exception
+    pd.DataFrame({
+        "concept": first_concepts[1:],
+        "value": [str(i) for i in range(len(first_concepts) - 1)],
+        "period_end": ["2020-10-01"] * (len(first_concepts) - 1)
+    }),
+
+    # Empty input dataframe raises exception
+    pd.DataFrame(),
+
+    # Rows found but value is empty
+    pd.DataFrame({
+        "concept": first_concepts,
+        "value": [""] * len(first_concepts),
+        "period_end": ["2020-10-01"] * len(first_concepts)
+    }),
+])
+def test_get_rows_raises(filing_df):
+    ff = FilingFacts(filing_df)
+    with pytest.raises(MissingFact):
+        ff.get_rows()
 
 # ------------- Integration tests -------------
 
@@ -263,9 +282,9 @@ def nvda_ten_q():
 @pytest.mark.integration
 def test_filings_facts_ten_q(nvda_ten_q):
     ten_q_df = XBRL.from_filing(nvda_ten_q).facts.to_dataframe()
-    FilingFacts(ten_q_df)
+    FilingFacts(ten_q_df).parse()
 
 @pytest.mark.integration
 def test_filings_facts_ten_k(nvda_ten_k):
     ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
-    FilingFacts(ten_k_df)
+    FilingFacts(ten_k_df).parse()

@@ -11,6 +11,7 @@ class InvalidFact(Exception):
 class FilingFacts():
     """
     Raw, uncalculated, data pulled from a single quarterly filing (10-Q, 10-K).
+    Filing validation is performed after data is pulled.
     filing_df: a dataframe from a quarterly filing.
     """
     gaap_tags = {
@@ -42,6 +43,8 @@ class FilingFacts():
             "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
             "us-gaap:CapitalExpenditures",
             "us-gaap:PaymentsForCapitalExpenditures",
+            "us-gaap:NetCashUsedForInvestingActivities",
+            "us-gaap:PaymentsToAcquireProductiveAssets",
         ),
         "gross_profit": (
             "us-gaap:GrossProfit",
@@ -66,9 +69,13 @@ class FilingFacts():
         raise a MissingFact exception.
         Returns dataframe of found facts for latest period_end.
         """
+        if self.facts_df.empty:
+            raise MissingFact(f"Input dataframe is empty.")
         results_df = pd.DataFrame()
         for fact_type, concepts in self.gaap_tags.items():
             rows_df = self.seek_tags_until_found(concepts)
+            if FilingFacts.data_missing(rows_df):
+                raise MissingFact(f"Could not find a matching row for {fact_type}")
             rows_df.insert(0, "fact_type", fact_type)
             if results_df.empty:  
                 results_df = rows_df
