@@ -196,6 +196,7 @@ def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
     )
 
 first_concepts = [val[0] for val in FilingFacts.gaap_tags.values()]
+last_concepts = [val[-1] for val in FilingFacts.gaap_tags.values()]
 @pytest.mark.parametrize("filing_df, expected_df", [
     # Ideal case: single first-matches for each tag
     (
@@ -213,6 +214,19 @@ first_concepts = [val[0] for val in FilingFacts.gaap_tags.values()]
     ),
 
     # Acceptable case: last concept matches
+    (
+        pd.DataFrame({
+            "concept": last_concepts,
+            "value": [str(i) for i in range(len(last_concepts))],
+            "period_end": ["2020-10-01"] * len(last_concepts)
+        }),
+        pd.DataFrame({
+            "fact_type": list(FilingFacts.gaap_tags.keys()),
+            "concept": last_concepts,
+            "value": [str(i) for i in range(len(last_concepts))],
+            "period_end": ["2020-10-01"] * len(last_concepts)
+        })
+    ),
 
     # Single missing row for all concepts under one gaap_tags key
     # raises exception
