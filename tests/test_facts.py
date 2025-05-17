@@ -195,8 +195,8 @@ def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
         df_expected.reset_index(drop=True)
     )
 
-first_concepts = [val[0] for val in FilingFacts.gaap_tags.values()]
-last_concepts = [val[-1] for val in FilingFacts.gaap_tags.values()]
+first_concepts = [val["tags"][0] for val in FilingFacts.gaap_tags.values()]
+last_concepts = [val["tags"][-1] for val in FilingFacts.gaap_tags.values()]
 @pytest.mark.parametrize("filing_df, expected_df", [
     # Ideal case: single first-matches for each tag
     (

@@ -15,44 +15,71 @@ class FilingFacts():
     filing_df: a dataframe from a quarterly filing.
     """
     gaap_tags = {
-        "revenue": (
-            "us-gaap:Revenues",
-            "us-gaap:SalesRevenueNet",
-            "us-gaap:SalesRevenueServicesNet",
-        ),
-        "eps": (
-            "us-gaap:EarningsPerShareDiluted",
-            "us-gaap:EarningsPerShareBasicAndDiluted",
-        ),
-        "diluted_shares": (
-            "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
-            "us-gaap:WeightedAverageNumberOfSharesOutstandingDiluted",
-        ),
-        "net_income": (
-            "us-gaap:NetIncomeLoss",
-            "us-gaap:ProfitLoss",
-        ),
-        "operating_income": (
-            "us-gaap:OperatingIncomeLoss",
-        ),
-        "operating_cash_flow": (
-            "us-gaap:NetCashProvidedByUsedInOperatingActivities",
-            "us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
-        ),
-        "cap_ex": (
-            "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
-            "us-gaap:CapitalExpenditures",
-            "us-gaap:PaymentsForCapitalExpenditures",
-            "us-gaap:NetCashUsedForInvestingActivities",
-            "us-gaap:PaymentsToAcquireProductiveAssets",
-        ),
-        "gross_profit": (
-            "us-gaap:GrossProfit",
-        ),
-        "cash_equivalents": (
-            "us-gaap:CashAndCashEquivalentsAtCarryingValue",
-            "us-gaap:CashCashEquivalentsAndShortTermInvestments",
-        )
+        "revenue": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:Revenues",
+                "us-gaap:SalesRevenueNet",
+                "us-gaap:SalesRevenueServicesNet",
+                )
+        },
+        "eps": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:EarningsPerShareDiluted",
+                "us-gaap:EarningsPerShareBasicAndDiluted",
+            )
+        },
+        "diluted_shares": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+                "us-gaap:WeightedAverageNumberOfSharesOutstandingDiluted",
+            ),
+        },
+        "net_income": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:NetIncomeLoss",
+                "us-gaap:ProfitLoss",
+            )
+        },
+        "operating_income": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:OperatingIncomeLoss",
+            ),
+        },
+        "operating_cash_flow": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+                "us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
+            ),
+        },
+        "cap_ex": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+                "us-gaap:CapitalExpenditures",
+                "us-gaap:PaymentsForCapitalExpenditures",
+                "us-gaap:NetCashUsedForInvestingActivities",
+                "us-gaap:PaymentsToAcquireProductiveAssets",
+            ),
+        },
+        "gross_profit": {
+            "period_type": "duration",
+            "tags": (
+                "us-gaap:GrossProfit",
+            ),
+        },
+        "cash_equivalents": {
+            "period_type": "instant",
+            "tags": (
+                "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+                "us-gaap:CashCashEquivalentsAndShortTermInvestments",
+            ),
+        }
     }
 
     def __init__(self, filing_df):
@@ -72,8 +99,9 @@ class FilingFacts():
         if self.facts_df.empty:
             raise MissingFact(f"Input dataframe is empty.")
         results_df = pd.DataFrame()
-        for fact_type, concepts in self.gaap_tags.items():
-            rows_df = self.seek_tags_until_found(concepts)
+        for fact_type, concept in self.gaap_tags.items():
+            tags = concept["tags"]
+            rows_df = self.seek_tags_until_found(tags)
             if FilingFacts.data_missing(rows_df):
                 raise MissingFact(f"Could not find a matching row for {fact_type}")
             rows_df.insert(0, "fact_type", fact_type)
