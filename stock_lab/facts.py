@@ -14,6 +14,12 @@ class FilingFacts():
     Filing validation is performed after data is pulled.
     filing_df: a dataframe from a quarterly filing.
     """
+    period_type_bi_dict = {
+        "period_end": "duration",
+        "duration": "period_end",
+        "period_instant": "instant",
+        "instant": "period_instant",
+    }
     gaap_tags = {
         "revenue": {
             "period_type": "duration",
@@ -79,7 +85,7 @@ class FilingFacts():
                 "us-gaap:CashAndCashEquivalentsAtCarryingValue",
                 "us-gaap:CashCashEquivalentsAndShortTermInvestments",
             ),
-        }
+        },
     }
 
     def __init__(self, filing_df):
@@ -99,9 +105,8 @@ class FilingFacts():
         if self.facts_df.empty:
             raise MissingFact(f"Input dataframe is empty.")
         results_df = pd.DataFrame()
-        for fact_type, concept in self.gaap_tags.items():
-            tags = concept["tags"]
-            rows_df = self.seek_tags_until_found(tags)
+        for fact_type, gaap_dict in self.gaap_tags.items():
+            rows_df = self.seek_tags_until_found(gaap_dict)
             if FilingFacts.data_missing(rows_df):
                 raise MissingFact(f"Could not find a matching row for {fact_type}")
             rows_df.insert(0, "fact_type", fact_type)
@@ -120,37 +125,42 @@ class FilingFacts():
             return True
         return df["value"].replace("", pd.NA).isna().all()
 
-    def seek_tags_until_found(self, gaap_tags):
+    def seek_tags_until_found(self, gaap_dict):
         """
-        Search in order of gaap_tags until at least one is found,
+        Search in order of gaap_data until at least one is found,
         short circuiting other tags when a tag finds a match.
         Returns dataframe for ALL rows for that tag with the latest end date.
         """
         rows = None
-        for tag in gaap_tags:
-            rows = self.get_for_latest_end_dates(tag)
+        target_date = FilingFacts.period_type_bi_dict[gaap_dict["period_type"]]
+        for tag in gaap_dict["tags"]:
+            rows = self.get_for_latest_date(tag, target_date)
             if not rows.empty:
                 return rows
         return rows
 
-    def get_for_latest_end_dates(self, tag):
+    def get_for_latest_date(self, tag, target_date):
         """
         For provided tag (aka "concept"), 
-        find the most recent end dates in the filing.
+        find the most recent dates in the filing.
         Returns a dataframe with each row found.
         """
         concept_rows = self.facts_df.loc[
             self.facts_df["concept"] == tag
         ].copy()
 
-        concept_rows = concept_rows.dropna(subset=["period_end"])
+        concept_rows = concept_rows.dropna(subset=[target_date])
         if concept_rows.empty:
             return concept_rows
         
-        latest_end_date = concept_rows["period_end"].max()
+        latest_date = concept_rows[target_date].max()
         result_rows = concept_rows.loc[
-            concept_rows["period_end"] == latest_end_date
+            concept_rows[target_date] == latest_date
         ]
+
+        expected_date_type = FilingFacts.period_type_bi_dict[target_date]
+        if not (result_rows["period_type"] == expected_date_type).all():
+            raise InvalidFact(f"Expected all {expected_date_type} but got {result_rows["period_type"]}.")
         return result_rows
 
     def validate(self):

@@ -4,7 +4,7 @@ import pandas as pd
 from edgar.xbrl.xbrl import XBRL
 
 import stock_lab.utils
-from stock_lab.facts import FilingFacts, MissingFact
+from stock_lab.facts import FilingFacts, MissingFact, InvalidFact
 
 # ---------------- Unit tests ----------------
 
@@ -51,145 +51,232 @@ from stock_lab.facts import FilingFacts, MissingFact
 def test_data_missing(df, expected):
     assert FilingFacts.data_missing(df) == expected
 
-@pytest.mark.parametrize("concept, df_in, df_expected",[
+@pytest.mark.parametrize("concept, target_date, df_in, df_expected",[
     # Ideal case: multiple rows but only one latest end_date
     (
         "us-gaap:Revenues",
+        "period_end",
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:Revenues", "us-gaap:CostOfRevenue"],
             "value": ["2000", "3000", "1000"],
-            "period_end": ["2024-01-29", "2024-10-27", "2024-11-27"]
+            "period_end": ["2024-01-29", "2024-10-27", "2024-11-27"],
+            "period_type": ["duration", "duration", "duration"]
         }),
         pd.DataFrame({
             "concept": ["us-gaap:Revenues"],
             "value": ["3000"],
-            "period_end": ["2024-10-27"]
+            "period_end": ["2024-10-27"],
+            "period_type": ["duration"]
         })
     ),
 
     # No matching concept
     (
         "us-gaap:NetIncomeLoss",
+        "period_end",
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:CostOfRevenue"],
             "value": ["3000", "1000"],
-            "period_end": ["2024-10-27", "2024-11-27"]
+            "period_end": ["2024-10-27", "2024-11-27"],
+            "period_type": ["duration", "duration"]
         }),
-        pd.DataFrame(columns=["concept", "value", "period_end"])
+        pd.DataFrame(columns=["concept", "value", "period_end", "period_type"])
     ),
 
     # Latest date "tie"
     (
         "us-gaap:Revenues",
+        "period_end",
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
             "value": ["3000", "4000"],
-            "period_end": ["2024-10-27", "2024-10-27"]
+            "period_end": ["2024-10-27", "2024-10-27"],
+            "period_type": ["duration", "duration"]
         }),
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
             "value": ["3000", "4000"],
-            "period_end": ["2024-10-27", "2024-10-27"]
+            "period_end": ["2024-10-27", "2024-10-27"],
+            "period_type": ["duration", "duration"]
         })
     ),
 
     # Ignore missing period_end
     (
         "us-gaap:Revenues",
+        "period_end",
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
             "value": ["3000", "4000"],
-            "period_end": ["2024-10-27", None]
+            "period_end": ["2024-10-27", None],
+            "period_type": ["duration", "duration"]
         }),
         pd.DataFrame({
             "concept": ["us-gaap:Revenues"],
             "value": ["3000"],
-            "period_end": ["2024-10-27"]
+            "period_end": ["2024-10-27"],
+            "period_type": ["duration"]
+        })
+    ),
+
+    # Instant date type
+    (
+        "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_instant",
+        pd.DataFrame({
+            "concept": ["us-gaap:CashAndCashEquivalentsAtCarryingValue", 
+                        "us-gaap:CashAndCashEquivalentsAtCarryingValue"],
+            "value": ["3000", "4000"],
+            "period_instant": ["2024-10-27", "2023-10-27"],
+            "period_type": ["instant", "instant"]
+        }),
+        pd.DataFrame({
+            "concept": ["us-gaap:CashAndCashEquivalentsAtCarryingValue"],
+            "value": ["3000"],
+            "period_instant": ["2024-10-27"],
+            "period_type": ["instant"]
         })
     ),
 
 ])
-def test_get_for_latest_end_dates(concept, df_in, df_expected):
+def test_get_for_latest_date(concept, target_date, df_in, df_expected):
     ff = FilingFacts(df_in)
-    actual_df = ff.get_for_latest_end_dates(concept)
+    actual_df = ff.get_for_latest_date(concept, target_date)
     pd.testing.assert_frame_equal(
         actual_df.reset_index(drop=True), df_expected.reset_index(drop=True))
 
-@pytest.mark.parametrize("gaap_tags, df_in, df_expected", [
+@pytest.mark.parametrize("concept, target_date, mismatched_df", [
+    # Revenues should be a duration
+    (
+        "us-gaap:Revenues",
+        "period_end",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues"],
+            "value": ["2000"],
+            "period_end": ["2024-01-29"],
+            "period_type": ["instant"]
+        }),
+    ),
+
+    # Cash should be an instant
+    (
+        "us-gaap:CashAndCashEquivalentsAtCarryingValue",
+        "period_instant",
+        pd.DataFrame({
+            "concept": ["us-gaap:CashAndCashEquivalentsAtCarryingValue"],
+            "value": ["3000"],
+            "period_instant": ["2024-10-27"],
+            "period_type": ["duration"]
+        }),
+    ),
+
+    # Mixed types under the same target_date should raise error
+    (
+        "us-gaap:Revenues",
+        "period_end",
+        pd.DataFrame({
+            "concept": ["us-gaap:Revenues", "us-gaap:Revenues"],
+            "value": ["2000", "1000"],
+            "period_end": ["2024-01-29", "2024-01-29"],
+            "period_type": ["instant", "duration"]
+        }),
+    ),
+])
+def test_get_for_latest_date_raises(concept, target_date, mismatched_df):
+    # TODO: Raise exception from new class var
+    ff = FilingFacts(mismatched_df)
+    with pytest.raises(InvalidFact):
+        ff.get_for_latest_date(concept, target_date)
+
+@pytest.mark.parametrize("gaap_dict, df_in, df_expected", [
     # Ideal case: first tag matches
     (
-        ("us-gaap:Revenues", "us-gaap:SalesRevenueNet",),
+        {"period_type": "duration",
+         "tags": ("us-gaap:Revenues", "us-gaap:SalesRevenueNet",)},
         pd.DataFrame({
             "concept": ["us-gaap:Revenues", "us-gaap:SalesRevenueNet"],
             "value": ["111", "222"],
-            "period_end": ["2024-10-27", "2024-01-01"]
+            "period_end": ["2024-10-27", "2024-01-01"],
+            "period_type": ["duration", "duration"]
         }),
         pd.DataFrame({
             "concept": ["us-gaap:Revenues"],
             "value": ["111"],
-            "period_end": ["2024-10-27"]
+            "period_end": ["2024-10-27"],
+            "period_type": ["duration"]
         })
     ),
 
     # Fallback case: first tag not found
     (
-        ["tag1", "tag2"],
+        {"period_type": "duration",
+         "tags": ("us-gaap:Revenues", "us-gaap:SalesRevenueNet",)},
         pd.DataFrame({
-            "concept": ["tag2"],
+            "concept": ["us-gaap:SalesRevenueNet"],
             "value": ["222"],
-            "period_end": ["2024-01-01"]
+            "period_end": ["2024-01-01"],
+            "period_type": ["duration"]
         }),
         pd.DataFrame({
-            "concept": ["tag2"],
+            "concept": ["us-gaap:SalesRevenueNet"],
             "value": ["222"],
-            "period_end": ["2024-01-01"]
+            "period_end": ["2024-01-01"],
+            "period_type": ["duration"]
         })
     ),
 
     # No tags match
     (
-        ["tag1", "tag2"],
+        {"period_type": "duration",
+         "tags": ("us-gaap:EarningsPerShareDiluted", "us-gaap:EarningsPerShareBasicAndDiluted")},
         pd.DataFrame({
-            "concept": ["tag3"],
+            "concept": ["us-gaap:EarningsPerShareBasic"],
             "value": ["333"],
-            "period_end": ["2024-01-01"]
+            "period_end": ["2024-01-01"],
+            "period_type": ["duration"]
         }),
-        pd.DataFrame(columns=["concept", "value", "period_end"])
+        pd.DataFrame(columns=["concept", "value", "period_end", "period_type"])
     ),
 
-    # Multiple first-matches
+    # Multiple first-tag matches should take latest date
     (
-        ["tag1"],
+        {"period_type": "duration",
+         "tags": ("us-gaap:NetIncomeLoss",)},
         pd.DataFrame({
-            "concept": ["tag1", "tag1", "tag1"],
+            "concept": ["us-gaap:NetIncomeLoss", "us-gaap:NetIncomeLoss", "us-gaap:NetIncomeLoss"],
             "value": ["100", "200", "300"],
-            "period_end": ["2024-10-27", "2024-10-27", "2023-12-31"]
+            "period_end": ["2024-10-27", "2024-10-27", "2023-12-31"],
+            "period_type": ["duration", "duration", "duration"]
         }),
         pd.DataFrame({
-            "concept": ["tag1", "tag1"],
+            "concept": ["us-gaap:NetIncomeLoss", "us-gaap:NetIncomeLoss"],
             "value": ["100", "200"],
-            "period_end": ["2024-10-27", "2024-10-27"]
+            "period_end": ["2024-10-27", "2024-10-27"],
+            "period_type": ["duration", "duration"],
         })
     ),
 
-    # Missing period_end
+    # Missing period_end should be ignored"us-gaap:OperatingIncomeLoss"
     (
-        ["tag1"],
+        {"period_type": "instant",
+         "tags": ("us-gaap:CashAndCashEquivalentsAtCarryingValue",)},
         pd.DataFrame({
-            "concept": ["tag1", "tag1"],
+            "concept": ["us-gaap:CashAndCashEquivalentsAtCarryingValue", "us-gaap:CashAndCashEquivalentsAtCarryingValue"],
             "value": ["111", "222"],
-            "period_end": ["2024-10-27", None]
+            "period_instant": ["2024-10-27", None],
+            "period_type": ["instant", "instant"],
         }),
         pd.DataFrame({
-            "concept": ["tag1"],
+            "concept": ["us-gaap:CashAndCashEquivalentsAtCarryingValue"],
             "value": ["111"],
-            "period_end": ["2024-10-27"]
+            "period_instant": ["2024-10-27"],
+            "period_type": ["instant"]
         })
     ),
 ])
-def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
+def test_seek_tags_until_found(gaap_dict, df_in, df_expected):
     ff = FilingFacts(df_in)
-    actual = ff.seek_tags_until_found(gaap_tags)
+    actual = ff.seek_tags_until_found(gaap_dict)
     pd.testing.assert_frame_equal(
         actual.reset_index(drop=True),
         df_expected.reset_index(drop=True)
@@ -197,19 +284,28 @@ def test_seek_tags_until_found(gaap_tags, df_in, df_expected):
 
 first_concepts = [val["tags"][0] for val in FilingFacts.gaap_tags.values()]
 last_concepts = [val["tags"][-1] for val in FilingFacts.gaap_tags.values()]
+period_ends = ["2020-10-01" if val['period_type'] == "duration" else "" 
+               for val in FilingFacts.gaap_tags.values()]
+period_instants = ["2020-10-01" if val['period_type'] == "instant" else "" 
+                   for val in FilingFacts.gaap_tags.values()]
+period_types = [val["period_type"] for val in FilingFacts.gaap_tags.values()]
 @pytest.mark.parametrize("filing_df, expected_df", [
     # Ideal case: single first-matches for each tag
     (
         pd.DataFrame({
             "concept": first_concepts,
             "value": [str(i) for i in range(len(first_concepts))],
-            "period_end": ["2020-10-01"] * len(first_concepts)
+            "period_end": period_ends,
+            "period_instant": period_instants,
+            "period_type": period_types
         }),
         pd.DataFrame({
             "fact_type": list(FilingFacts.gaap_tags.keys()),
             "concept": first_concepts,
             "value": [str(i) for i in range(len(first_concepts))],
-            "period_end": ["2020-10-01"] * len(first_concepts)
+            "period_end": period_ends,
+            "period_instant": period_instants,
+            "period_type": period_types
         })
     ),
 
@@ -218,13 +314,17 @@ last_concepts = [val["tags"][-1] for val in FilingFacts.gaap_tags.values()]
         pd.DataFrame({
             "concept": last_concepts,
             "value": [str(i) for i in range(len(last_concepts))],
-            "period_end": ["2020-10-01"] * len(last_concepts)
+            "period_end": ["2020-10-01"] * len(last_concepts),
+            "period_instant": period_instants,
+            "period_type": period_types
         }),
         pd.DataFrame({
             "fact_type": list(FilingFacts.gaap_tags.keys()),
             "concept": last_concepts,
             "value": [str(i) for i in range(len(last_concepts))],
-            "period_end": ["2020-10-01"] * len(last_concepts)
+            "period_end": ["2020-10-01"] * len(last_concepts),
+            "period_instant": period_instants,
+            "period_type": period_types
         })
     ),
 ])
@@ -242,7 +342,9 @@ def test_get_rows(filing_df, expected_df):
     pd.DataFrame({
         "concept": first_concepts[1:],
         "value": [str(i) for i in range(len(first_concepts) - 1)],
-        "period_end": ["2020-10-01"] * (len(first_concepts) - 1)
+        "period_end": ["2020-10-01"] * (len(first_concepts) - 1),
+        "period_instant": period_instants[1:],
+        "period_type": period_types[1:]
     }),
 
     # Empty input dataframe raises exception
@@ -252,7 +354,9 @@ def test_get_rows(filing_df, expected_df):
     pd.DataFrame({
         "concept": first_concepts,
         "value": [""] * len(first_concepts),
-        "period_end": ["2020-10-01"] * len(first_concepts)
+        "period_end": ["2020-10-01"] * len(first_concepts),
+        "period_instant": period_instants,
+        "period_type": period_types
     }),
 ])
 def test_get_rows_raises(filing_df):
