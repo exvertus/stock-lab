@@ -93,7 +93,7 @@ class FilingFacts():
 
     def parse(self):
         self.rows = self.get_rows()
-        self.validate()
+        self.post_checks()
 
     def get_rows(self):
         """
@@ -163,6 +163,6 @@ class FilingFacts():
             raise InvalidFact(f"Expected all {expected_date_type} but got {result_rows["period_type"]}.")
         return result_rows
 
-    def validate(self):
-        # End dates should all be the same.
+    def post_checks(self):
+        # End and instant dates should all be the same.
         pass

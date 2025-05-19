@@ -289,6 +289,7 @@ period_ends = ["2020-10-01" if val['period_type'] == "duration" else ""
 period_instants = ["2020-10-01" if val['period_type'] == "instant" else "" 
                    for val in FilingFacts.gaap_tags.values()]
 period_types = [val["period_type"] for val in FilingFacts.gaap_tags.values()]
+
 @pytest.mark.parametrize("filing_df, expected_df", [
     # Ideal case: single first-matches for each tag
     (
@@ -359,10 +360,49 @@ def test_get_rows(filing_df, expected_df):
         "period_type": period_types
     }),
 ])
-def test_get_rows_raises(filing_df):
+def test_get_rows_raises_mf(filing_df):
     ff = FilingFacts(filing_df)
     with pytest.raises(MissingFact):
         ff.get_rows()
+
+@pytest.mark.parametrize("filing_df", [
+    # Filing with acceptable values should not raise an error
+    (
+        pd.DataFrame({
+            "concept": [
+                "us-gaap:Revenues",
+                "us-gaap:EarningsPerShareDiluted",
+                "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
+                "us-gaap:NetIncomeLoss",
+                "us-gaap:OperatingIncomeLoss",
+                "us-gaap:NetCashProvidedByUsedInOperatingActivities",
+                "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
+                "us-gaap:GrossProfit",
+                "us-gaap:CashAndCashEquivalentsAtCarryingValue"
+            ],
+            "value": [
+                "1000000",
+                "1.23",
+                "400000",
+                "400",
+                "500",
+                "234",
+                "3000",
+                "240",
+                "30000"
+            ],
+            "period_end": period_ends,
+            "period_instant": period_instants,
+            "period_type": period_types
+        })
+    )
+])
+def test_get_rows_validation_clean(filing_df):
+    ff = FilingFacts(filing_df)
+    ff.get_rows()
+
+def test_get_rows_validation_raises():
+    pass
 
 # ------------- Integration tests -------------
 
