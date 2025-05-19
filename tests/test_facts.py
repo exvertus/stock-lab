@@ -401,6 +401,14 @@ def test_get_rows_validation_clean(filing_df):
     ff = FilingFacts(filing_df)
     ff.get_rows()
 
+# Revenue must be >= 0
+# EPS must be numeric
+# Diluted shares > 0
+# Net income must be numeric
+# Operating income must be numeric
+# Operating cash flow must be numeric
+# Gross profit must be numeric
+# Cash equivalents must be >= 0
 def test_get_rows_validation_raises():
     pass
 
