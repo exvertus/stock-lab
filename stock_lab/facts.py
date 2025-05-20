@@ -1,5 +1,7 @@
 import pandas as pd
 
+# TODO: Add decorator to wrap error messages for validator pipeline funcs.
+
 class MissingFact(Exception):
     """Thrown when expected data is not present."""
     pass
@@ -8,12 +10,71 @@ class InvalidFact(Exception):
     """Thrown when a row's data does not conform to expectations."""
     pass
 
+def err_if_none_in_column(column_name, df):
+    """
+    Raise a MissingFact exception if any value in the column is 'none-like':
+    - None
+    - np.nan / pd.NA
+    - Empty string
+    - Whitespace-only string
+    """
+    col = df[column_name]
+    mask = col.isna() | col.astype(str).str.strip().eq("")
+    if mask.any():
+        raise MissingFact(
+            f"Found none-like value(s) in column '{column_name}':\n{df.loc[mask]}"
+        )
+
+def values_to_num(df):
+    """
+    Convert all cells in the values column to numerics.
+    If any cannot be converted raise InvalidFact exception.
+    """
+    try:
+        df["value"] = pd.to_numeric(df["value"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert value to numeric: {e}")
+    return df
+    
+def values_not_negative(df):
+    """
+    Raise an InvalidFact expection if anything in the values column is < 0.
+    """
+    if (df["value"] < 0).any():
+        raise InvalidFact(f"Value should not be < 0")
+    return df
+    
+def duration_to_date(df):
+    """
+    Convert all in the period_start and period_end columns to date types.
+    """
+    err_if_none_in_column("period_start", df)
+    err_if_none_in_column("period_end", df)
+    try:
+        df["period_start"] = pd.to_datetime(df["period_start"], errors='raise')
+        df["period_end"] = pd.to_datetime(df["period_end"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert to date: {e}")
+    return df
+
+def instant_to_date(df):
+    """
+    Convert all in the period_instant column to date types.
+    """
+    err_if_none_in_column("period_instant", df)
+    try:
+        df["period_instant"] = pd.to_datetime(df["period_instant"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert to date: {e}")
+    return df
+
 class FilingFacts():
     """
-    Raw, uncalculated, data pulled from a single quarterly filing (10-Q, 10-K).
-    Filing validation is performed after data is pulled.
+    Raw data pulled from a single quarterly filing (10-Q, 10-K).
+    Type conversion and filing validation is performed after data is pulled.
     filing_df: a dataframe from a quarterly filing.
     """
+
     period_type_bi_dict = {
         "period_end": "duration",
         "duration": "period_end",
@@ -107,6 +168,7 @@ class FilingFacts():
         results_df = pd.DataFrame()
         for fact_type, gaap_dict in self.gaap_tags.items():
             rows_df = self.seek_tags_until_found(gaap_dict)
+            # Validate here?
             if FilingFacts.data_missing(rows_df):
                 raise MissingFact(f"Could not find a matching row for {fact_type}")
             rows_df.insert(0, "fact_type", fact_type)
@@ -124,6 +186,13 @@ class FilingFacts():
         if "value" not in df.columns:
             return True
         return df["value"].replace("", pd.NA).isna().all()
+    
+    @staticmethod
+    def normalize_duration(df):
+        """
+        Convert period_start, period_end columns to date types
+        and value column to numerics."""
+        pass
 
     def seek_tags_until_found(self, gaap_dict):
         """

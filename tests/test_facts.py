@@ -1,12 +1,246 @@
 import pytest
 import pandas as pd
+import numpy as np
 
 from edgar.xbrl.xbrl import XBRL
 
 import stock_lab.utils
-from stock_lab.facts import FilingFacts, MissingFact, InvalidFact
+from stock_lab.facts import ( 
+    FilingFacts, MissingFact, InvalidFact, values_to_num, values_not_negative,
+    duration_to_date, instant_to_date, err_if_none_in_column
+)
 
 # ---------------- Unit tests ----------------
+
+@pytest.mark.parametrize("column_name, df", [
+    # If all elements in a column are not none-like, do not raise exception.
+    (
+        "value",
+        pd.DataFrame({
+                "value": ["14", 12, "something", "not nothing"]
+            })
+    ),
+
+    # Other columns may contain blank values without raising exception.
+    (
+        "column_with_values",
+        pd.DataFrame({
+                "column_with_values": ["14", 12, "something", "not nothing"],
+                "column_without": [None, "", "   ", pd.NA]
+            })
+    )
+])
+def test_err_if_none_in_column(column_name, df):
+    err_if_none_in_column(column_name, df)
+
+@pytest.mark.parametrize("column_name, df", [
+    # None should raise MissingFact
+    (
+        "value",
+        pd.DataFrame({
+                "value": ["14", 12, "something", None]
+            })
+    ),
+
+    # Numpy nan should raise MissingFact
+    (
+        "value",
+        pd.DataFrame({
+                "value": ["14", np.nan, "something", "everything"]
+            })
+    ),
+
+    # Nan float type should raise MissingFact
+    (
+        "value",
+        pd.DataFrame({
+                "value": [float('nan'), "whatever", "something", "everything"]
+            })
+    ),
+
+    # Empty string should raise MissingFact
+    (
+        "value",
+        pd.DataFrame({
+                "value": ["14", 6635, "", "exists"]
+            })
+    ),
+
+    # All-whitespace string should raise MissingFact
+    (
+        "column_name",
+        pd.DataFrame({
+                "column_name": ["\t", 6635, "this", "exists"]
+            })
+    ),
+])
+def test_err_if_none_in_column_raises(column_name, df):
+    with pytest.raises(MissingFact):
+        err_if_none_in_column(column_name, df)
+
+@pytest.mark.parametrize("df, expected", [
+    # Numeric values should be converted
+    (
+        pd.DataFrame({
+            "value": ["17", "8.41", "-4.17"]
+        }),
+        pd.DataFrame({
+            "value": [17, 8.41, -4.17]
+        })
+    ),
+])
+def test_values_to_num(df, expected):
+    actual_df = values_to_num(df)
+    pd.testing.assert_frame_equal(
+        actual_df.reset_index(drop=True), expected.reset_index(drop=True))
+
+@pytest.mark.parametrize("df", [
+    pd.DataFrame({
+            "value": ["17", "8.41", "not a numeric"]
+        }),
+])
+def test_values_to_num_raises(df):
+    with pytest.raises(InvalidFact):
+        values_to_num(df)
+
+@pytest.mark.parametrize("df, expected", [
+    # Non-negative input should no-op
+    (
+        pd.DataFrame({
+            "value": [80000000, 17, 8.41, 4.17]
+        }),
+        pd.DataFrame({
+            "value": [80000000, 17, 8.41, 4.17]
+        })
+    ),
+])
+def test_values_not_negative(df, expected):
+    pd.testing.assert_frame_equal(
+        values_not_negative(df).reset_index(drop=True),
+        expected.reset_index(drop=True)
+    )
+
+@pytest.mark.parametrize("df", [
+    # Negative numbers should raise InvalidFact
+    (
+        pd.DataFrame({
+            "value": [80000000, 17, 8.41, 4.17, -7000]
+        })
+    ),
+])
+def test_values_not_negative_raises(df):
+    with pytest.raises(InvalidFact):
+        values_not_negative(df)
+
+@pytest.mark.parametrize("df, expected", [
+    (
+        pd.DataFrame({
+            "period_start": ["2024-01-01", "2023-04-01"],
+            "period_end": ["2024-03-31", "2024-03-31"]
+        }),
+        pd.DataFrame({
+            "period_start": [
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2023-04-01")
+            ],
+            "period_end": [
+                pd.Timestamp("2024-03-31"),
+                pd.Timestamp("2024-03-31")
+            ]
+        }),
+    ),
+])
+def test_duration_to_date(df, expected):
+    actual = duration_to_date(df)
+    pd.testing.assert_frame_equal(
+        actual.reset_index(drop=True),
+        expected.reset_index(drop=True)
+    )
+
+@pytest.mark.parametrize("df", [
+    # An invalid date in period_end should raise InvalidFact
+    pd.DataFrame({
+        "period_start": ["2024-01-01", "2023-04-01"],
+        "period_end": ["2024-03-31", "applesauce"]
+    }),
+
+    # An invalid date in period_start should raise InvalidFact
+    pd.DataFrame({
+        "period_start": ["2024-01-01", "November 2020"],
+        "period_end": ["2024-03-31", "2023-04-01"]
+    }),
+])
+def test_duration_to_date_raises_invalid(df):
+    with pytest.raises(InvalidFact):
+        duration_to_date(df)
+
+@pytest.mark.parametrize("df", [
+    # A nil value for a date should raise InvalidFact
+    pd.DataFrame({
+        "period_start": ["2024-01-01", "2023-04-01"],
+        "period_end": ["2024-03-31", ""]
+    }),
+
+    # A nan value for a date should raise InvalidFact
+    pd.DataFrame({
+        "period_start": ["2024-01-01", float('nan')],
+        "period_end": ["2024-03-31", "2023-04-01"]
+    }),
+])
+def test_duration_to_date_raises_missing(df):
+    with pytest.raises(MissingFact):
+        duration_to_date(df)
+
+@pytest.mark.parametrize("df, expected", [
+    # Valid dates should return converted dates
+    (
+        pd.DataFrame({
+            "period_instant": ["2024-01-01", "2023-04-01"]
+        }),
+        pd.DataFrame({
+            "period_instant": [
+                pd.Timestamp("2024-01-01"),
+                pd.Timestamp("2023-04-01")
+            ]
+        }),
+    ),
+])
+def test_instant_to_date(df, expected):
+    actual = instant_to_date(df)
+    pd.testing.assert_frame_equal(
+        actual.reset_index(drop=True),
+        expected.reset_index(drop=True)
+    )
+
+@pytest.mark.parametrize("df", [
+    # An invalid date in period_end should raise InvalidFact
+    pd.DataFrame({
+        "period_instant": ["2024-01-01", "today-3"]
+    }),
+
+    # An invalid date in period_start should raise InvalidFact
+    pd.DataFrame({
+        "period_instant": ["2024-01-01", "November 2020"]
+    }),
+])
+def test_instant_to_date_raises_invalid(df):
+    with pytest.raises(InvalidFact):
+        instant_to_date(df)
+
+@pytest.mark.parametrize("df", [
+    # Only whitespace for a date should raise InvalidFact
+    pd.DataFrame({
+        "period_instant": ["2024-01-01", " "]
+    }),
+
+    # A nan value for a date should raise InvalidFact
+    pd.DataFrame({
+        "period_instant": ["2024-01-01", float('nan')]
+    }),
+])
+def test_instant_to_date_raises_missing(df):
+    with pytest.raises(MissingFact):
+        instant_to_date(df)
 
 @pytest.mark.parametrize("df, expected", [
     # Empty datafrom
@@ -369,27 +603,17 @@ def test_get_rows_raises_mf(filing_df):
     # Filing with acceptable values should not raise an error
     (
         pd.DataFrame({
-            "concept": [
-                "us-gaap:Revenues",
-                "us-gaap:EarningsPerShareDiluted",
-                "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
-                "us-gaap:NetIncomeLoss",
-                "us-gaap:OperatingIncomeLoss",
-                "us-gaap:NetCashProvidedByUsedInOperatingActivities",
-                "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
-                "us-gaap:GrossProfit",
-                "us-gaap:CashAndCashEquivalentsAtCarryingValue"
-            ],
+            "concept": first_concepts,
             "value": [
-                "1000000",
-                "1.23",
-                "400000",
-                "400",
-                "500",
-                "234",
-                "3000",
-                "240",
-                "30000"
+                "1000000", # revenue
+                "1.23",    # eps
+                "400000",  # diluted_shares
+                "400",     # net_income
+                "500",     # operating_income
+                "234",     # operating_cash_flow
+                "3000",    # cap_ex
+                "240",     # gross_profit
+                "30000"    # cash_equivalents
             ],
             "period_end": period_ends,
             "period_instant": period_instants,
@@ -401,16 +625,40 @@ def test_get_rows_validation_clean(filing_df):
     ff = FilingFacts(filing_df)
     ff.get_rows()
 
-# Revenue must be >= 0
-# EPS must be numeric
-# Diluted shares > 0
-# Net income must be numeric
-# Operating income must be numeric
-# Operating cash flow must be numeric
-# Gross profit must be numeric
-# Cash equivalents must be >= 0
-def test_get_rows_validation_raises():
-    pass
+# @pytest.mark.parametrize("filing_df", [
+#     # Revenue must be >= 0
+#     (
+#         pd.DataFrame({
+#             "concept": first_concepts,
+#             "value": [
+#                 "-100000", # revenue
+#                 "1.23",    # eps
+#                 "400000",  # diluted_shares
+#                 "400",     # net_income
+#                 "500",     # operating_income
+#                 "234",     # operating_cash_flow
+#                 "3000",    # cap_ex
+#                 "240",     # gross_profit
+#                 "30000"    # cash_equivalents
+#             ],
+#             "period_end": period_ends,
+#             "period_instant": period_instants,
+#             "period_type": period_types
+#         })
+#     ),
+
+#     # EPS must be numeric
+#     # Diluted shares > 0
+#     # Net income must be numeric
+#     # Operating income must be numeric
+#     # Operating cash flow must be numeric
+#     # Gross profit must be numeric
+#     # Cash equivalents must be >= 0
+# ])
+# def test_get_rows_validation_raises(filing_df):
+#     ff = FilingFacts(filing_df)
+#     with pytest.raises(InvalidFact):
+#         ff.get_rows()
 
 # ------------- Integration tests -------------
 
@@ -420,15 +668,15 @@ def nvda_quarters():
     return stock_lab.utils.load_filings_from_dir(nvda_pkls)
 
 @pytest.fixture
-def nvda_ten_k():
-    return stock_lab.utils.load_filing_from_file(
-        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-25-000023.pkl"
-    )
-
-@pytest.fixture
 def nvda_ten_q():
     return stock_lab.utils.load_filing_from_file(
         stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-24-000316.pkl"
+    )
+
+@pytest.fixture
+def nvda_ten_k():
+    return stock_lab.utils.load_filing_from_file(
+        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-25-000023.pkl"
     )
 
 @pytest.mark.integration
