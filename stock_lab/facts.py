@@ -206,10 +206,6 @@ class FilingFacts():
     def __init__(self, filing_df):
         self.facts_df = filing_df
 
-    def parse(self):
-        self.rows = self.get_rows()
-        self.post_checks()
-
     def get_rows(self):
         """
         For each fact type, pull row(s) from the facts dataframe.
@@ -286,7 +282,3 @@ class FilingFacts():
         if not (result_rows["period_type"] == expected_date_type).all():
             raise InvalidFact(f"Expected all {expected_date_type} but got {result_rows["period_type"]}.")
         return result_rows
-
-    def post_checks(self):
-        # End and instant dates should all be the same.
-        pass

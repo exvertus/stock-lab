@@ -25,7 +25,7 @@ from tests.test_data import (
 # -----------------------------------------------------------------------------
 
 
-# ------------- Validator functions  -------------
+# ------------- Single-field validators -------------
 
 @pytest.mark.parametrize("column_name, df", [
     # If all elements in a column are not none-like, do not raise exception.
@@ -493,7 +493,6 @@ def test_get_for_latest_date(concept, target_date, df_in, df_expected):
     ),
 ])
 def test_get_for_latest_date_raises(concept, target_date, mismatched_df):
-    # TODO: Raise exception from new class var
     ff = FilingFacts(mismatched_df)
     with pytest.raises(InvalidFact):
         ff.get_for_latest_date(concept, target_date)
@@ -658,10 +657,10 @@ def test_get_rows_single(filing_df, expected_df):
     # Empty input dataframe raises exception
     pd.DataFrame(),
 
-    # Rows found but value is empty
+    # Rows all present but value is empty
     pd.DataFrame({
         "concept": first_concepts,
-        "value": [""] * len(first_concepts),
+        "value": [float('nan')] * len(first_concepts),
         "period_start": period_starts,
         "period_end": period_ends,
         "period_instant": period_instants,
@@ -706,11 +705,6 @@ def test_get_rows_invalid(filing_df):
     with pytest.raises(InvalidFact):
         ff.get_rows()
 
-# def test_get_rows_missing(filing_df):
-#     ff = FilingFacts(filing_df)
-#     with pytest.raises(MissingFact):
-#         ff.get_rows()
-
 # -----------------------------------------------------------------------------
 #                               Integration tests
 # -----------------------------------------------------------------------------
@@ -735,9 +729,11 @@ def nvda_ten_k():
 @pytest.mark.integration
 def test_filings_facts_ten_q(nvda_ten_q):
     ten_q_df = XBRL.from_filing(nvda_ten_q).facts.to_dataframe()
-    FilingFacts(ten_q_df).parse()
+    rows = FilingFacts(ten_q_df).get_rows()
+    #TODO: Create expected values from spreadsheet and assert against
 
 @pytest.mark.integration
 def test_filings_facts_ten_k(nvda_ten_k):
     ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
-    FilingFacts(ten_k_df).parse()
+    rows = FilingFacts(ten_k_df).get_rows()
+    #TODO: Create expected values from spreadsheet and assert against
