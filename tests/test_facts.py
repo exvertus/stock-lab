@@ -7,10 +7,25 @@ from edgar.xbrl.xbrl import XBRL
 import stock_lab.utils
 from stock_lab.facts import ( 
     FilingFacts, MissingFact, InvalidFact, values_to_num, values_not_negative,
-    duration_to_date, instant_to_date, err_if_none_in_column
+    duration_to_date, instant_to_date, err_if_none_in_column, values_positive,
+    values_non_positive
 )
 
-# ---------------- Unit tests ----------------
+from tests.test_data import (
+    first_concepts, last_concepts, period_ends, period_instants, period_types,
+    period_starts, negative_revenue, eps_non_number, zero_shares, 
+    income_non_numeric, op_income_non_numeric, op_cash_non_numeric,
+    cap_ex_positive, gross_profit_non_numeric, negative_cash_eq,
+    acceptable_values, acceptable_results, period_starts_results,
+    period_ends_results, period_instants_results
+)
+
+# -----------------------------------------------------------------------------
+#                                   Unit Tests
+# -----------------------------------------------------------------------------
+
+
+# ------------- Validator functions  -------------
 
 @pytest.mark.parametrize("column_name, df", [
     # If all elements in a column are not none-like, do not raise exception.
@@ -107,10 +122,10 @@ def test_values_to_num_raises(df):
     # Non-negative input should no-op
     (
         pd.DataFrame({
-            "value": [80000000, 17, 8.41, 4.17]
+            "value": [80000000, 0, 8.41, 4.17]
         }),
         pd.DataFrame({
-            "value": [80000000, 17, 8.41, 4.17]
+            "value": [80000000, 0, 8.41, 4.17]
         })
     ),
 ])
@@ -131,6 +146,65 @@ def test_values_not_negative(df, expected):
 def test_values_not_negative_raises(df):
     with pytest.raises(InvalidFact):
         values_not_negative(df)
+
+@pytest.mark.parametrize("df, expected", [
+    # Positive input should no-op
+    (
+        pd.DataFrame({
+            "value": [80000000, 17, 0.01, 4.17]
+        }),
+        pd.DataFrame({
+            "value": [80000000, 17, 0.01, 4.17]
+        })
+    ),
+])
+def test_values_positive(df, expected):
+    pd.testing.assert_frame_equal(
+        values_positive(df).reset_index(drop=True),
+        expected.reset_index(drop=True)
+    )
+
+@pytest.mark.parametrize("df", [
+    # Zero should raise InvalidFact
+    pd.DataFrame({
+        "value": [80000000, 17, 0.00, 4.17]
+    }),
+
+    # Negative should raise InvalidFact
+    pd.DataFrame({
+        "value": [80000000, -17, 0.01, 4.17]
+    }),
+])
+def test_values_positive_raises(df):
+    with pytest.raises(InvalidFact):
+        values_positive(df)
+
+@pytest.mark.parametrize("df, expected", [
+    # Non-positive input should no-op
+    (
+        pd.DataFrame({
+            "value": [-80000000, -17, 0.00, -4.17]
+        }),
+        pd.DataFrame({
+            "value": [-80000000, -17, 0.00, -4.17]
+        })
+    ),
+])
+def test_values_non_positive(df, expected):
+    pd.testing.assert_frame_equal(
+        values_non_positive(df).reset_index(drop=True),
+        expected.reset_index(drop=True)
+    )
+
+@pytest.mark.parametrize("df", [
+    # Positive should raise InvalidFact
+    pd.DataFrame({
+        "value": [-80000000, -17, 0.00, 4.17]
+    }),
+])
+def test_values_positive_raises(df):
+    with pytest.raises(InvalidFact):
+        values_non_positive(df)
 
 @pytest.mark.parametrize("df, expected", [
     (
@@ -284,6 +358,8 @@ def test_instant_to_date_raises_missing(df):
 ])
 def test_data_missing(df, expected):
     assert FilingFacts.data_missing(df) == expected
+
+# ------------- Getter methods -------------
 
 @pytest.mark.parametrize("concept, target_date, df_in, df_expected",[
     # Ideal case: multiple rows but only one latest end_date
@@ -516,20 +592,13 @@ def test_seek_tags_until_found(gaap_dict, df_in, df_expected):
         df_expected.reset_index(drop=True)
     )
 
-first_concepts = [val["tags"][0] for val in FilingFacts.gaap_tags.values()]
-last_concepts = [val["tags"][-1] for val in FilingFacts.gaap_tags.values()]
-period_ends = ["2020-10-01" if val['period_type'] == "duration" else "" 
-               for val in FilingFacts.gaap_tags.values()]
-period_instants = ["2020-10-01" if val['period_type'] == "instant" else "" 
-                   for val in FilingFacts.gaap_tags.values()]
-period_types = [val["period_type"] for val in FilingFacts.gaap_tags.values()]
-
 @pytest.mark.parametrize("filing_df, expected_df", [
     # Ideal case: single first-matches for each tag
     (
         pd.DataFrame({
             "concept": first_concepts,
-            "value": [str(i) for i in range(len(first_concepts))],
+            "value": acceptable_values,
+            "period_start": period_starts,
             "period_end": period_ends,
             "period_instant": period_instants,
             "period_type": period_types
@@ -537,9 +606,10 @@ period_types = [val["period_type"] for val in FilingFacts.gaap_tags.values()]
         pd.DataFrame({
             "fact_type": list(FilingFacts.gaap_tags.keys()),
             "concept": first_concepts,
-            "value": [str(i) for i in range(len(first_concepts))],
-            "period_end": period_ends,
-            "period_instant": period_instants,
+            "value": acceptable_results,
+            "period_start": period_starts_results,
+            "period_end": period_ends_results,
+            "period_instant": period_instants_results,
             "period_type": period_types
         })
     ),
@@ -548,22 +618,24 @@ period_types = [val["period_type"] for val in FilingFacts.gaap_tags.values()]
     (
         pd.DataFrame({
             "concept": last_concepts,
-            "value": [str(i) for i in range(len(last_concepts))],
-            "period_end": ["2020-10-01"] * len(last_concepts),
+            "value": acceptable_values,
+            "period_start": period_starts,
+            "period_end": period_ends,
             "period_instant": period_instants,
             "period_type": period_types
         }),
         pd.DataFrame({
             "fact_type": list(FilingFacts.gaap_tags.keys()),
             "concept": last_concepts,
-            "value": [str(i) for i in range(len(last_concepts))],
-            "period_end": ["2020-10-01"] * len(last_concepts),
-            "period_instant": period_instants,
+            "value": acceptable_results,
+            "period_start": period_starts_results,
+            "period_end": period_ends_results,
+            "period_instant": period_instants_results,
             "period_type": period_types
         })
     ),
 ])
-def test_get_rows(filing_df, expected_df):
+def test_get_rows_single(filing_df, expected_df):
     ff = FilingFacts(filing_df)
     actual = ff.get_rows()
     pd.testing.assert_frame_equal(
@@ -576,8 +648,9 @@ def test_get_rows(filing_df, expected_df):
     # raises exception
     pd.DataFrame({
         "concept": first_concepts[1:],
-        "value": [str(i) for i in range(len(first_concepts) - 1)],
-        "period_end": ["2020-10-01"] * (len(first_concepts) - 1),
+        "value": acceptable_values[1:],
+        "period_start": period_starts[1:],
+        "period_end": period_ends[1:],
         "period_instant": period_instants[1:],
         "period_type": period_types[1:]
     }),
@@ -589,7 +662,8 @@ def test_get_rows(filing_df, expected_df):
     pd.DataFrame({
         "concept": first_concepts,
         "value": [""] * len(first_concepts),
-        "period_end": ["2020-10-01"] * len(first_concepts),
+        "period_start": period_starts,
+        "period_end": period_ends,
         "period_instant": period_instants,
         "period_type": period_types
     }),
@@ -600,67 +674,46 @@ def test_get_rows_raises_mf(filing_df):
         ff.get_rows()
 
 @pytest.mark.parametrize("filing_df", [
-    # Filing with acceptable values should not raise an error
-    (
-        pd.DataFrame({
-            "concept": first_concepts,
-            "value": [
-                "1000000", # revenue
-                "1.23",    # eps
-                "400000",  # diluted_shares
-                "400",     # net_income
-                "500",     # operating_income
-                "234",     # operating_cash_flow
-                "3000",    # cap_ex
-                "240",     # gross_profit
-                "30000"    # cash_equivalents
-            ],
-            "period_end": period_ends,
-            "period_instant": period_instants,
-            "period_type": period_types
-        })
-    )
+    # Revenue must be >= 0
+    (negative_revenue),
+
+    # EPS must be numeric
+    (eps_non_number),
+
+    # Diluted shares must be > 0
+    (zero_shares),
+
+    # Net income must be numeric
+    (income_non_numeric),
+
+    # Operating income must be numeric
+    (op_income_non_numeric),
+
+    # Operating cash flow must be numeric
+    (op_cash_non_numeric),
+
+    # Cap_ex must be not be positive
+    (cap_ex_positive),
+
+    # Gross profit must be numeric
+    (gross_profit_non_numeric),
+
+    # Cash equivalents must be >= 0
+    (negative_cash_eq),
 ])
-def test_get_rows_validation_clean(filing_df):
+def test_get_rows_invalid(filing_df):
     ff = FilingFacts(filing_df)
-    ff.get_rows()
+    with pytest.raises(InvalidFact):
+        ff.get_rows()
 
-# @pytest.mark.parametrize("filing_df", [
-#     # Revenue must be >= 0
-#     (
-#         pd.DataFrame({
-#             "concept": first_concepts,
-#             "value": [
-#                 "-100000", # revenue
-#                 "1.23",    # eps
-#                 "400000",  # diluted_shares
-#                 "400",     # net_income
-#                 "500",     # operating_income
-#                 "234",     # operating_cash_flow
-#                 "3000",    # cap_ex
-#                 "240",     # gross_profit
-#                 "30000"    # cash_equivalents
-#             ],
-#             "period_end": period_ends,
-#             "period_instant": period_instants,
-#             "period_type": period_types
-#         })
-#     ),
-
-#     # EPS must be numeric
-#     # Diluted shares > 0
-#     # Net income must be numeric
-#     # Operating income must be numeric
-#     # Operating cash flow must be numeric
-#     # Gross profit must be numeric
-#     # Cash equivalents must be >= 0
-# ])
-# def test_get_rows_validation_raises(filing_df):
+# def test_get_rows_missing(filing_df):
 #     ff = FilingFacts(filing_df)
-#     with pytest.raises(InvalidFact):
+#     with pytest.raises(MissingFact):
 #         ff.get_rows()
 
-# ------------- Integration tests -------------
+# -----------------------------------------------------------------------------
+#                               Integration tests
+# -----------------------------------------------------------------------------
 
 @pytest.fixture
 def nvda_quarters():
