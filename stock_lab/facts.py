@@ -1,5 +1,7 @@
 import pandas as pd
 
+# TODO: Add decorator to wrap error messages for validator pipeline funcs.
+
 class MissingFact(Exception):
     """Thrown when expected data is not present."""
     pass
@@ -8,12 +10,85 @@ class InvalidFact(Exception):
     """Thrown when a row's data does not conform to expectations."""
     pass
 
+def err_if_none_in_column(column_name, df):
+    """
+    Raise a MissingFact exception if any value in the column is 'none-like':
+    - None
+    - np.nan / pd.NA
+    - Empty string
+    - Whitespace-only string
+    """
+    col = df[column_name]
+    mask = col.isna() | col.astype(str).str.strip().eq("")
+    if mask.any():
+        raise MissingFact(
+            f"Found none-like value(s) in column '{column_name}':\n{df.loc[mask]}"
+        )
+
+def values_to_num(df):
+    """
+    Convert all cells in the value column to numerics.
+    If any cannot be converted raise InvalidFact exception.
+    """
+    try:
+        df["value"] = pd.to_numeric(df["value"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert value to numeric: {e}")
+    return df
+    
+def values_not_negative(df):
+    """
+    Raise an InvalidFact expection if anything in the value column is < 0.
+    """
+    if (df["value"] < 0).any():
+        raise InvalidFact("Value should not be < 0")
+    return df
+
+def values_positive(df):
+    """
+    Raise an InvalidFact exception if anything in the value column is <= 0.
+    """
+    if (df["value"] <= 0).any():
+        raise InvalidFact("Value should positive")
+    return df
+
+def values_non_positive(df):
+    """Raise an InvalidFact exception if anything in the value column is > 0."""
+    if (df["value"] > 0).any():
+        raise InvalidFact("Value should be non-positive")
+    return df
+    
+def duration_to_date(df):
+    """
+    Convert all in the period_start and period_end columns to date types.
+    """
+    err_if_none_in_column("period_start", df)
+    err_if_none_in_column("period_end", df)
+    try:
+        df["period_start"] = pd.to_datetime(df["period_start"], errors='raise')
+        df["period_end"] = pd.to_datetime(df["period_end"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert to date: {e}")
+    return df
+
+def instant_to_date(df):
+    """
+    Convert all in the period_instant column to date types.
+    """
+    err_if_none_in_column("period_instant", df)
+    try:
+        df["period_instant"] = pd.to_datetime(df["period_instant"], errors='raise')
+    except ValueError as e:
+        raise InvalidFact(f"Failed to convert to date: {e}")
+    return df
+
 class FilingFacts():
     """
-    Raw, uncalculated, data pulled from a single quarterly filing (10-Q, 10-K).
-    Filing validation is performed after data is pulled.
+    Raw data pulled from a single quarterly filing (10-Q, 10-K).
+    Type conversion and filing validation is performed after data is pulled.
     filing_df: a dataframe from a quarterly filing.
     """
+
     period_type_bi_dict = {
         "period_end": "duration",
         "duration": "period_end",
@@ -23,6 +98,11 @@ class FilingFacts():
     gaap_tags = {
         "revenue": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num,
+                values_not_negative
+            ],
             "tags": (
                 "us-gaap:Revenues",
                 "us-gaap:SalesRevenueNet",
@@ -31,6 +111,10 @@ class FilingFacts():
         },
         "eps": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num
+            ],
             "tags": (
                 "us-gaap:EarningsPerShareDiluted",
                 "us-gaap:EarningsPerShareBasicAndDiluted",
@@ -38,6 +122,11 @@ class FilingFacts():
         },
         "diluted_shares": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num,
+                values_positive
+            ],
             "tags": (
                 "us-gaap:WeightedAverageNumberOfDilutedSharesOutstanding",
                 "us-gaap:WeightedAverageNumberOfSharesOutstandingDiluted",
@@ -45,6 +134,10 @@ class FilingFacts():
         },
         "net_income": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num
+            ],
             "tags": (
                 "us-gaap:NetIncomeLoss",
                 "us-gaap:ProfitLoss",
@@ -52,12 +145,20 @@ class FilingFacts():
         },
         "operating_income": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num
+            ],
             "tags": (
                 "us-gaap:OperatingIncomeLoss",
             ),
         },
         "operating_cash_flow": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num
+            ],
             "tags": (
                 "us-gaap:NetCashProvidedByUsedInOperatingActivities",
                 "us-gaap:NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
@@ -65,6 +166,11 @@ class FilingFacts():
         },
         "cap_ex": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num,
+                values_non_positive
+            ],
             "tags": (
                 "us-gaap:PaymentsToAcquirePropertyPlantAndEquipment",
                 "us-gaap:CapitalExpenditures",
@@ -75,12 +181,21 @@ class FilingFacts():
         },
         "gross_profit": {
             "period_type": "duration",
+            "valid_type_pipe": [
+                duration_to_date,
+                values_to_num
+            ],
             "tags": (
                 "us-gaap:GrossProfit",
             ),
         },
         "cash_equivalents": {
             "period_type": "instant",
+            "valid_type_pipe": [
+                instant_to_date,
+                values_to_num,
+                values_not_negative
+            ],
             "tags": (
                 "us-gaap:CashAndCashEquivalentsAtCarryingValue",
                 "us-gaap:CashCashEquivalentsAndShortTermInvestments",
@@ -90,10 +205,6 @@ class FilingFacts():
 
     def __init__(self, filing_df):
         self.facts_df = filing_df
-
-    def parse(self):
-        self.rows = self.get_rows()
-        self.validate()
 
     def get_rows(self):
         """
@@ -107,6 +218,8 @@ class FilingFacts():
         results_df = pd.DataFrame()
         for fact_type, gaap_dict in self.gaap_tags.items():
             rows_df = self.seek_tags_until_found(gaap_dict)
+            for func in gaap_dict["valid_type_pipe"]:
+                rows_df = func(rows_df)
             if FilingFacts.data_missing(rows_df):
                 raise MissingFact(f"Could not find a matching row for {fact_type}")
             rows_df.insert(0, "fact_type", fact_type)
@@ -124,6 +237,13 @@ class FilingFacts():
         if "value" not in df.columns:
             return True
         return df["value"].replace("", pd.NA).isna().all()
+    
+    @staticmethod
+    def normalize_duration(df):
+        """
+        Convert period_start, period_end columns to date types
+        and value column to numerics."""
+        pass
 
     def seek_tags_until_found(self, gaap_dict):
         """
@@ -162,7 +282,3 @@ class FilingFacts():
         if not (result_rows["period_type"] == expected_date_type).all():
             raise InvalidFact(f"Expected all {expected_date_type} but got {result_rows["period_type"]}.")
         return result_rows
-
-    def validate(self):
-        # End dates should all be the same.
-        pass
