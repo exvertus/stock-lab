@@ -5,6 +5,7 @@ from edgar import Filing, Company, get_filings
 from edgar.xbrl.xbrl import XBRL
 
 REPO_ROOT = Path(__file__).parent.parent
+TEST_DATA_DIR = REPO_ROOT/"tests"/"data"
 
 def save_latest_quarters(ticker, n, save_dir):
     """

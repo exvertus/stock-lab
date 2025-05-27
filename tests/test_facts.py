@@ -1,24 +1,24 @@
-# import pytest
-# import pandas as pd
-# import numpy as np
+import pytest
+import pandas as pd
+import numpy as np
 
-# from edgar.xbrl.xbrl import XBRL
+from edgar.xbrl.xbrl import XBRL
 
-# import stock_lab.utils
-# from stock_lab.facts import ( 
-#     FilingFacts, MissingFact, InvalidFact, values_to_num, values_not_negative,
-#     duration_to_date, instant_to_date, err_if_none_in_column, values_positive,
-#     values_non_positive
-# )
+import stock_lab.utils
+from stock_lab.facts import ( 
+    FilingFacts, MissingFact, InvalidFact, values_to_num, values_not_negative,
+    duration_to_date, instant_to_date, err_if_none_in_column, values_positive,
+    values_non_positive
+)
 
-# from tests.test_data import (
-#     first_concepts, last_concepts, period_ends, period_instants, period_types,
-#     period_starts, negative_revenue, eps_non_number, zero_shares, 
-#     income_non_numeric, op_income_non_numeric, op_cash_non_numeric,
-#     cap_ex_positive, gross_profit_non_numeric, negative_cash_eq,
-#     acceptable_values, acceptable_results, period_starts_results,
-#     period_ends_results, period_instants_results
-# )
+from tests.test_data import (
+    first_concepts, last_concepts, period_ends, period_instants, period_types,
+    period_starts, negative_revenue, eps_non_number, zero_shares, 
+    income_non_numeric, op_income_non_numeric, op_cash_non_numeric,
+    cap_ex_positive, gross_profit_non_numeric, negative_cash_eq,
+    acceptable_values, acceptable_results, period_starts_results,
+    period_ends_results, period_instants_results
+)
 
 # # -----------------------------------------------------------------------------
 # #                                   Unit Tests
@@ -709,31 +709,32 @@
 # #                               Integration tests
 # # -----------------------------------------------------------------------------
 
-# @pytest.fixture
-# def nvda_quarters():
-#     nvda_pkls = stock_lab.utils.REPO_ROOT/"tests/data/nvda"
-#     return stock_lab.utils.load_filings_from_dir(nvda_pkls)
+@pytest.fixture
+def nvda_quarters():
+    nvda_pkls = stock_lab.utils.REPO_ROOT/"tests/data/nvda"
+    return stock_lab.utils.load_filings_from_dir(nvda_pkls)
 
-# @pytest.fixture
-# def nvda_ten_q():
-#     return stock_lab.utils.load_filing_from_file(
-#         stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-24-000316.pkl"
-#     )
+@pytest.fixture
+def nvda_ten_q():
+    return stock_lab.utils.load_filing_from_file(
+        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-24-000316.pkl"
+    )
 
-# @pytest.fixture
-# def nvda_ten_k():
-#     return stock_lab.utils.load_filing_from_file(
-#         stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-25-000023.pkl"
-#     )
+@pytest.fixture
+def nvda_ten_k():
+    return stock_lab.utils.load_filing_from_file(
+        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-25-000023.pkl"
+    )
 
-# @pytest.mark.integration
-# def test_filings_facts_ten_q(nvda_ten_q):
-#     ten_q_df = XBRL.from_filing(nvda_ten_q).facts.to_dataframe()
-#     rows = FilingFacts(ten_q_df).get_rows()
-#     #TODO: Create expected values from spreadsheet and assert against
+@pytest.mark.integration
+def test_filings_facts_ten_q(nvda_ten_q):
+    filing = XBRL.from_filing(nvda_ten_q)
+    ten_q_df = filing.facts.to_dataframe()
+    rows = FilingFacts(ten_q_df).get_rows()
+    #TODO: Create expected values from spreadsheet and assert against
 
-# @pytest.mark.integration
-# def test_filings_facts_ten_k(nvda_ten_k):
-#     ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
-#     rows = FilingFacts(ten_k_df).get_rows()
-#     #TODO: Create expected values from spreadsheet and assert against
+@pytest.mark.integration
+def test_filings_facts_ten_k(nvda_ten_k):
+    ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
+    rows = FilingFacts(ten_k_df).get_rows()
+    #TODO: Create expected values from spreadsheet and assert against

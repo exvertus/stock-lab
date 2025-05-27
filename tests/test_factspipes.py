@@ -1,8 +1,11 @@
 import pytest
 import pandas as pd
 
+from edgar.xbrl.xbrl import XBRL
+
+import stock_lab.utils
 from stock_lab.factspipes import (
-    match_first_in_column
+    match_first_in_column, FactsPipe, InvalidDate
 )
 
 @pytest.mark.parametrize("df, candidates, expected", [
@@ -74,3 +77,66 @@ def test_match_first_in_column(df, candidates, expected):
         actual.reset_index(drop=True),
         expected.reset_index(drop=True)
     )
+
+# # -----------------------------------------------------------------------------
+# #                               Integration tests
+# # -----------------------------------------------------------------------------
+
+@pytest.fixture
+def appl_quarters():
+    appl_pkls = stock_lab.utils.TEST_DATA_DIR/"aapl"
+    return stock_lab.utils.load_filings_from_dir(appl_pkls)
+
+@pytest.fixture
+def bdl_quarters():
+    bdl_pkls = stock_lab.utils.TEST_DATA_DIR/"bdl"
+    return stock_lab.utils.load_filings_from_dir(bdl_pkls)
+
+@pytest.fixture
+def nflx_quarters():
+    nflx_pkls = stock_lab.utils.TEST_DATA_DIR/"nflx"
+    return stock_lab.utils.load_filings_from_dir(nflx_pkls)
+
+@pytest.fixture
+def nvda_quarters():
+    nvda_pkls = stock_lab.utils.TEST_DATA_DIR/"nvda"
+    return stock_lab.utils.load_filings_from_dir(nvda_pkls)
+
+@pytest.fixture
+def x_quarters():
+    x_pkls = stock_lab.utils.TEST_DATA_DIR/"x"
+    return stock_lab.utils.load_filings_from_dir(x_pkls)
+
+@pytest.fixture
+def nvda_ten_q():
+    return stock_lab.utils.load_filing_from_file(
+        stock_lab.utils.TEST_DATA_DIR/"nvda/0001045810-24-000316.pkl"
+    )
+
+@pytest.fixture
+def nvda_ten_k():
+    return stock_lab.utils.load_filing_from_file(
+        stock_lab.utils.TEST_DATA_DIR/"nvda/0001045810-25-000023.pkl"
+    )
+
+@pytest.mark.integration
+def test_facts_pipe_ten_q(nvda_ten_q):
+    rows = FactsPipe(nvda_ten_q)
+    #TODO: Create expected values from spreadsheet and assert against
+
+@pytest.mark.integration
+def test_facts_pipe_ten_k(nvda_ten_k):
+    rows = FactsPipe(nvda_ten_k)
+    #TODO: Create expected values from spreadsheet and assert against
+
+def test_facts_pipe_multiple(appl_quarters,
+                             bdl_quarters,
+                             nflx_quarters,
+                             nvda_quarters,
+                             x_quarters):
+    for company in (appl_quarters, 
+                    nflx_quarters, 
+                    nvda_quarters,
+                    x_quarters):
+        for quarter in company:
+            FactsPipe(quarter)
