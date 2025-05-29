@@ -1,14 +1,20 @@
 import pytest
+from unittest.mock import Mock, MagicMock, patch
 import pandas as pd
 
 from edgar.xbrl.xbrl import XBRL
 
 import stock_lab.utils
-from stock_lab.factspipes import (
-    FactsPipe, MissingDate, InvalidDate,
+from stock_lab.facts_normalizer import (
+    XBRLFactsNormalizer, MissingDate, InvalidDate, FilingDataError,
     get_rows_matching_first_found_value, get_matching_period_data,
     get_matching_instant_data
 )
+
+
+# # -----------------------------------------------------------------------------
+# #                                 Unit tests
+# # -----------------------------------------------------------------------------
 
 @pytest.mark.parametrize("df, candidates, expected", [
     (
@@ -457,6 +463,97 @@ class TestGetMatchingInstantData:
         with pytest.raises(MissingDate):
             get_matching_instant_data(period_data_list, '2023-12-31')
 
+@pytest.fixture
+def mock_xbrl():
+    """Mock XBRL object with valid entity info."""
+    xbrl = Mock()
+    xbrl.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-Q'
+    }
+    xbrl.period_of_report = '2024-12-31'
+    return xbrl
+
+@pytest.fixture
+def mock_filing():
+    """Mock filing object with all required data."""
+    filing = Mock()
+    filing.accession_no = '0000320193-24-000456'
+    return filing
+
+@pytest.fixture
+def mock_xbrl_from_filing(mock_xbrl):
+    """Mock the XBRL.from_filing class method."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_filing_no_ticker(mock_filing):
+    """Mock filing where XBRL has missing ticker."""
+    mock_xbrl_no_ticker = Mock()
+    mock_xbrl_no_ticker.entity_info = {'document_type': '10-Q'}  # Missing ticker
+    mock_xbrl_no_ticker.period_of_report = '2024-12-31'
+    
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_no_ticker):
+        yield mock_filing
+
+@pytest.fixture
+def mock_filing_invalid_doc_type(mock_filing):
+    """Mock filing with invalid document type."""
+    mock_xbrl_bad_doc = Mock()
+    mock_xbrl_bad_doc.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '8-K'  # Invalid type
+    }
+    mock_xbrl_bad_doc.period_of_report = '2024-12-31'
+    
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_bad_doc):
+        yield mock_filing
+
+@pytest.fixture
+def mock_filing_xbrl_failure(mock_filing):
+    """Mock filing where XBRL.from_filing() raises an exception."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', side_effect=Exception("XBRL parsing failed")):
+        yield mock_filing
+
+@pytest.fixture
+def mock_filing_no_accession():
+    """Mock filing with neither accession attribute."""
+    filing = Mock()
+    # Remove both attributes
+    del filing.accession_no
+    del filing.accession_number
+    return filing
+
+def test_successful_metadata_extraction(mock_filing, mock_xbrl_from_filing):
+    """Test happy path with all required data present."""
+    normalizer = XBRLFactsNormalizer(mock_filing)
+    
+    assert normalizer.accession_number == '0000320193-24-000456'
+    assert normalizer.ticker == 'AAPL'
+    assert normalizer.document_type == '10-Q'
+    assert normalizer.report_end == '2024-12-31'
+
+def test_missing_ticker_raises_exception(mock_filing_no_ticker):
+    """Test that missing ticker raises descriptive exception."""
+    with pytest.raises(FilingDataError, match="Ticker not found"):
+        XBRLFactsNormalizer(mock_filing_no_ticker)
+
+def test_invalid_document_type_raises_exception(mock_filing_invalid_doc_type):
+    """Test that invalid document type raises exception."""
+    with pytest.raises(FilingDataError, match="Document type must be 10-K or 10-Q"):
+        XBRLFactsNormalizer(mock_filing_invalid_doc_type)
+
+def test_xbrl_creation_failure_raises_exception(mock_filing_xbrl_failure):
+    """Test that XBRL.from_filing() failure is handled."""
+    with pytest.raises(FilingDataError, match="Failed to create XBRL"):
+        XBRLFactsNormalizer(mock_filing_xbrl_failure)
+
+def test_missing_accession_raises_exception(mock_filing_no_accession, mock_xbrl_from_filing):
+    """Test that missing both accession attributes raises descriptive exception."""
+    with pytest.raises(FilingDataError, match="Accession number not found"):
+        XBRLFactsNormalizer(mock_filing_no_accession)
+
 # # -----------------------------------------------------------------------------
 # #                               Integration tests
 # # -----------------------------------------------------------------------------
@@ -500,14 +597,15 @@ def nvda_ten_k():
 
 @pytest.mark.integration
 def test_facts_pipe_ten_q(nvda_ten_q):
-    rows = FactsPipe(nvda_ten_q)
+    rows = XBRLFactsNormalizer(nvda_ten_q)
     #TODO: Create expected values from spreadsheet and assert against
 
 @pytest.mark.integration
 def test_facts_pipe_ten_k(nvda_ten_k):
-    rows = FactsPipe(nvda_ten_k)
+    rows = XBRLFactsNormalizer(nvda_ten_k)
     #TODO: Create expected values from spreadsheet and assert against
 
+@pytest.mark.integration
 def test_facts_pipe_multiple(appl_quarters,
                              bdl_quarters,
                              nflx_quarters,
@@ -519,4 +617,4 @@ def test_facts_pipe_multiple(appl_quarters,
                     nvda_quarters,
                     x_quarters):
         for quarter in company:
-            FactsPipe(quarter)
+            XBRLFactsNormalizer(quarter)

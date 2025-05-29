@@ -2,15 +2,16 @@ import pandas as pd
 
 from edgar.xbrl.xbrl import XBRL
 
-# example: revenue pipeline
-# first_tag > check_duration > max_end_date > max_start_date > max_value > 
+class FilingDataError(Exception):
+    """Raised when required filing data is missing or invalid."""
+    pass
 
 class InvalidDate(Exception):
-    """Thrown when something invalid related to a date is encountered."""
+    """Raised when something invalid related to a date is encountered."""
     pass
 
 class MissingDate(Exception):
-    """Thrown when expected date is missing."""
+    """Raised when expected date is missing."""
     pass
 
 def get_rows_matching_first_found_value(dataframe, target_column, candidate_values):
@@ -126,26 +127,80 @@ def get_matching_instant_data(period_data_list, target_instant_date):
         raise InvalidDate(f"Found more than one instant date for {target_instant_date}")
     return results[0]
 
-class FactsPipe():
+class XBRLFactsNormalizer:
     """
-    Data ingestion pipeline for getting key facts from filing object.
+    Normalizes and extracts key financial metrics from XBRL filing data.
+    
+    Takes structured XBRL data (via edgartools) and normalizes varying GAAP tags
+    and date ranges into standardized financial concepts. Handles the complexity
+    of multiple tags representing the same concept, date range variations, and
+    segment breakdowns to extract the most appropriate values.
+    
+    Extracts core metrics including revenue, EPS, diluted shares, net income,
+    operating income, operating cash flow, capex, gross profit, and cash equivalents
+    from 10-K and 10-Q filings.
+    
+    The class applies modular processing steps: tag identification, date range
+    filtering, value selection (preferring totals over breakdowns), and basic
+    validation/transformation.
+    
+    Args:
+        filing: Edgartools filing object
+        
+    Returns:
+        DataFrame with normalized financial facts, with individual metrics
+        accessible via attributes. Includes metadata for downstream processing
+        when exact date ranges aren't available.
+        
+    Example:
+        >>> normalizer = XBRLFactsNormalizer(filing)
+        >>> facts_df = normalizer.extract()
+        >>> quarterly_revenue = normalizer.revenue
     """
     def __init__(self, filing):
         self.filing = filing
-        self.xbrl = XBRL.from_filing(filing)
-        self.get_keys()
+        self.get_metadata()
+
+    def get_metadata(self):
+        """
+        Pull metadata from filing.
+        """
+        try:
+            self.xbrl = XBRL.from_filing(self.filing)
+        except(Exception) as e:
+            raise FilingDataError(f"Failed to create XBRL: {e}")
+
+        try:
+            self.accession_number = self.filing.accession_no
+        except(AttributeError):
+            try:
+                self.accession_number = self.filing.accession_number
+            except(AttributeError):
+                raise FilingDataError("Accession number not found")
+
+        try:
+            self.ticker = self.xbrl.entity_info['ticker']
+        except(KeyError):
+            raise FilingDataError("Ticker not found")
+
+        try:
+            self.document_type = self.xbrl.entity_info['document_type']
+        except(KeyError):
+            raise FilingDataError("Document type not found")
         
-    def get_keys(self):
-        """
-        Get filing metadata for accessing information.
-        """
-        self.accession_number = self.filing.accession_no
-        self.ticker = self.xbrl.entity_info['ticker']
-        self.document_type = self.xbrl.entity_info['document_type']
+        if self.document_type not in ('10-K', '10-Q'):
+            raise FilingDataError(f"Document type must be 10-K or 10-Q: got {self.document_type}")
         self.report_end = self.xbrl.period_of_report
+
+    def extract(self):
+        pass
+        
+    def get_timeframes(self):
+        """
+        
+        """
         self.current_instant = get_matching_instant_data(
             self.xbrl.reporting_periods, self.report_end)
-
         # TODO: Handle 10-K in an inherited class instead?
         if self.document_type == '10-K':
             self.annual_duration = get_matching_period_data(
@@ -166,4 +221,5 @@ class FactsPipe():
         """
         Get revenue data for a given 
         """
+        # first_tag > check_duration > max_end_date > max_start_date > max_value > 
         pass
