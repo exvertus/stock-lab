@@ -157,13 +157,23 @@ class XBRLFactsNormalizer:
         >>> facts_df = normalizer.extract()
         >>> quarterly_revenue = normalizer.revenue
     """
+    quarterly_days_range = (86, 93)
+    annual_days_range = (350, 385)
+
     def __init__(self, filing):
         self.filing = filing
         self.get_metadata()
-
+        self.get_period_keys()
+        
     def get_metadata(self):
         """
-        Pull metadata from filing.
+        Extract and validate required metadata from filing object.
+        
+        Sets instance attributes: xbrl, accession_number, ticker, document_type, 
+        and report_end. Validates document_type is 10-K or 10-Q.
+        
+        Raises:
+            FilingDataError: If any required metadata is missing or invalid.
         """
         try:
             self.xbrl = XBRL.from_filing(self.filing)
@@ -190,33 +200,46 @@ class XBRLFactsNormalizer:
         
         if self.document_type not in ('10-K', '10-Q'):
             raise FilingDataError(f"Document type must be 10-K or 10-Q: got {self.document_type}")
+        
         self.report_end = self.xbrl.period_of_report
+        if not self.report_end:
+            raise FilingDataError(f"Report date not found for {self.ticker}")
 
-    def extract(self):
-        pass
-        
-    def get_timeframes(self):
+    def get_period_keys(self):
         """
-        
+        Identify and validate most suitable timing period dictionaries
+        for extracting desired data---one instant, multiple durations.
+
+        Result:
+            self.instant_dict = instant date for filing end date
+            self.quarter_durations = list of date range dicts for latest quarter
+            self.annual_durations = date ranges for year (only required for 10-K)
+
+        Raises:
+            MissingDate: Could not find one or more of the necessary dates
+            InvalidDate: If date range outside acceptable duration,
+               if zero context ids found for instant or a duration
         """
-        self.current_instant = get_matching_instant_data(
+        # Later maybe TODO (depends on data edge-cases encountered):
+        #   - Allow 10-Ks to skip quarterly if it is missing
+        #   - Use a range from report_end in case of earlier durations
+        #      that still span for almost the entire quarter/year
+        #   - Fallback logic for durations (try quarterly, then ytd, ttm, annual)
+        self.instant_dict = get_matching_instant_data(
             self.xbrl.reporting_periods, self.report_end)
-        # TODO: Handle 10-K in an inherited class instead?
+
+        self.quarter_durations = get_matching_period_data(
+                self.xbrl.reporting_periods, self.report_end, 'Quarterly')
+
         if self.document_type == '10-K':
             self.annual_duration = get_matching_period_data(
                 self.xbrl.reporting_periods, self.report_end, 'Annual')
-            try:
-                self.quarter_duration = get_matching_period_data(
-                self.xbrl.reporting_periods, self.report_end, 'Quarterly')
-            except MissingDate:
-                self.quarter_duration = None
         else:
-            self.quarter_duration = get_matching_period_data(
-            self.xbrl.reporting_periods, self.report_end, 'Quarterly')
-
-        # TODO: Will probably need to add some kind of YTD range as
-        # some data can be listed as a YTD duration only
+            self.annual_duration = None
         
+    def extract(self):
+        self.get_revenue()
+
     def get_revenue(self):
         """
         Get revenue data for a given 

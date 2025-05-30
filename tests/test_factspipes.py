@@ -1,6 +1,7 @@
 import pytest
 from unittest.mock import Mock, MagicMock, patch
 import pandas as pd
+import datetime
 
 from edgar.xbrl.xbrl import XBRL
 
@@ -10,7 +11,6 @@ from stock_lab.facts_normalizer import (
     get_rows_matching_first_found_value, get_matching_period_data,
     get_matching_instant_data
 )
-
 
 # # -----------------------------------------------------------------------------
 # #                                 Unit tests
@@ -464,7 +464,37 @@ class TestGetMatchingInstantData:
             get_matching_instant_data(period_data_list, '2023-12-31')
 
 @pytest.fixture
-def mock_xbrl():
+def valid_periods():
+    """Valid period data for period testing."""
+    return [
+        {
+            'type': 'instant', 
+            'date': '2024-12-31', 
+            'context_ids': ['c-1'], 
+            'key': 'instant_2024-12-31'
+        },
+        {
+            'type': 'duration',
+            'start_date': '2024-10-02',
+            'end_date': '2024-12-31', 
+            'days': 90, 
+            'period_type': 'Quarterly',
+            'context_ids': ['c-2', 'c-3', 'c-4'], 
+            'key': 'duration_2024-07-29_2024-12-31'
+        },
+        {
+            'type': 'duration', 
+            'start_date': '2023-12-31',
+            'end_date': '2024-12-31', 
+            'days': 365, 
+            'period_type': 'Annual',
+            'context_ids': ['c-5', 'c-6'], 
+            'key': 'duration_2024-01-01_2024-12-31'
+        }
+    ]
+
+@pytest.fixture
+def mock_xbrl(valid_periods):
     """Mock XBRL object with valid entity info."""
     xbrl = Mock()
     xbrl.entity_info = {
@@ -472,6 +502,19 @@ def mock_xbrl():
         'document_type': '10-Q'
     }
     xbrl.period_of_report = '2024-12-31'
+    xbrl.reporting_periods = valid_periods
+    return xbrl
+
+@pytest.fixture
+def mock_xbrl_10_k(valid_periods):
+    """Mock XBRL object with valid 10-K entity info."""
+    xbrl = Mock()
+    xbrl.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-K'
+    }
+    xbrl.period_of_report = '2024-12-31'
+    xbrl.reporting_periods = valid_periods
     return xbrl
 
 @pytest.fixture
@@ -485,6 +528,12 @@ def mock_filing():
 def mock_xbrl_from_filing(mock_xbrl):
     """Mock the XBRL.from_filing class method."""
     with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_xbrl_10_k_from_filing(mock_xbrl_10_k):
+    """Mock the XBRL.from_filing class method."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_10_k) as mock:
         yield mock
 
 @pytest.fixture
@@ -525,6 +574,19 @@ def mock_filing_no_accession():
     del filing.accession_number
     return filing
 
+@pytest.fixture
+def mock_filing_no_report_end(mock_filing):
+    """Mock filing lacking report end."""
+    mock_no_report = Mock()
+    mock_no_report.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-K'
+    }
+    mock_no_report.period_of_report = ''
+    
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_no_report):
+        yield mock_filing
+
 def test_successful_metadata_extraction(mock_filing, mock_xbrl_from_filing):
     """Test happy path with all required data present."""
     normalizer = XBRLFactsNormalizer(mock_filing)
@@ -553,6 +615,31 @@ def test_missing_accession_raises_exception(mock_filing_no_accession, mock_xbrl_
     """Test that missing both accession attributes raises descriptive exception."""
     with pytest.raises(FilingDataError, match="Accession number not found"):
         XBRLFactsNormalizer(mock_filing_no_accession)
+
+def test_missing_report_end_raises_exception(mock_filing_no_report_end):
+    with pytest.raises(FilingDataError, match="Report date not found"):
+        XBRLFactsNormalizer(mock_filing_no_report_end)
+
+def test_get_period_keys_ten_q(mock_filing, mock_xbrl_from_filing):
+    """Test happy path for a 10-Q"""
+    normalizer_10q = XBRLFactsNormalizer(mock_filing)
+
+    assert normalizer_10q.instant_dict['date'] == '2024-12-31'
+    assert len(normalizer_10q.quarter_durations) >= 1
+    assert normalizer_10q.quarter_durations[0]['days'] == 90
+
+def test_get_period_keys_ten_k(mock_filing, mock_xbrl_10_k_from_filing):
+    """Test happy path for a 10-K"""
+    normalizer_10k = XBRLFactsNormalizer(mock_filing)
+
+    assert normalizer_10k.annual_duration[0]['days'] == 365
+
+# TODO: Finish these
+def test_get_period_keys_missing_data():
+    assert 1 == 2
+
+def test_get_period_keys_invalid_data():
+    assert 1 == 2
 
 # # -----------------------------------------------------------------------------
 # #                               Integration tests
@@ -595,24 +682,30 @@ def nvda_ten_k():
         stock_lab.utils.TEST_DATA_DIR/"nvda/0001045810-25-000023.pkl"
     )
 
+# TODO: update
 @pytest.mark.integration
 def test_facts_pipe_ten_q(nvda_ten_q):
     rows = XBRLFactsNormalizer(nvda_ten_q)
     #TODO: Create expected values from spreadsheet and assert against
 
+# TODO: update
 @pytest.mark.integration
 def test_facts_pipe_ten_k(nvda_ten_k):
     rows = XBRLFactsNormalizer(nvda_ten_k)
     #TODO: Create expected values from spreadsheet and assert against
 
 @pytest.mark.integration
+def test_facts_normalizer_small_cap(bdl_quarters):
+    for quarter in bdl_quarters:
+        normalizer = XBRLFactsNormalizer(bdl_quarters)
+
+# TODO: update
+@pytest.mark.integration
 def test_facts_pipe_multiple(appl_quarters,
-                             bdl_quarters,
                              nflx_quarters,
                              nvda_quarters,
                              x_quarters):
     for company in (appl_quarters, 
-                    bdl_quarters,
                     nflx_quarters, 
                     nvda_quarters,
                     x_quarters):

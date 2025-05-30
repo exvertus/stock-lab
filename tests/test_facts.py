@@ -704,37 +704,3 @@ from tests.test_data import (
 #     ff = FilingFacts(filing_df)
 #     with pytest.raises(InvalidFact):
 #         ff.get_rows()
-
-# # -----------------------------------------------------------------------------
-# #                               Integration tests
-# # -----------------------------------------------------------------------------
-
-@pytest.fixture
-def nvda_quarters():
-    nvda_pkls = stock_lab.utils.REPO_ROOT/"tests/data/nvda"
-    return stock_lab.utils.load_filings_from_dir(nvda_pkls)
-
-@pytest.fixture
-def nvda_ten_q():
-    return stock_lab.utils.load_filing_from_file(
-        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-24-000316.pkl"
-    )
-
-@pytest.fixture
-def nvda_ten_k():
-    return stock_lab.utils.load_filing_from_file(
-        stock_lab.utils.REPO_ROOT/"tests/data/nvda/0001045810-25-000023.pkl"
-    )
-
-@pytest.mark.integration
-def test_filings_facts_ten_q(nvda_ten_q):
-    filing = XBRL.from_filing(nvda_ten_q)
-    ten_q_df = filing.facts.to_dataframe()
-    rows = FilingFacts(ten_q_df).get_rows()
-    #TODO: Create expected values from spreadsheet and assert against
-
-@pytest.mark.integration
-def test_filings_facts_ten_k(nvda_ten_k):
-    ten_k_df = XBRL.from_filing(nvda_ten_k).facts.to_dataframe()
-    rows = FilingFacts(ten_k_df).get_rows()
-    #TODO: Create expected values from spreadsheet and assert against
