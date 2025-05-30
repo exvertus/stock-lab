@@ -483,12 +483,108 @@ def valid_periods():
             'key': 'duration_2024-07-29_2024-12-31'
         },
         {
+            'type': 'duration',
+            'start_date': '2024-10-03',
+            'end_date': '2024-12-31', 
+            'days': 90, 
+            'period_type': 'Quarterly',
+            'context_ids': ['c-8', 'c-9', 'c-10'], 
+            'key': 'duration_2024-07-29_2024-12-31'
+        },
+        {
             'type': 'duration', 
             'start_date': '2023-12-31',
             'end_date': '2024-12-31', 
             'days': 365, 
             'period_type': 'Annual',
             'context_ids': ['c-5', 'c-6'], 
+            'key': 'duration_2024-01-01_2024-12-31'
+        }
+    ]
+
+@pytest.fixture
+def invalid_periods():
+    """Unexpected double instant on same date."""
+    return [
+        {
+            'type': 'instant', 
+            'date': '2024-12-31', 
+            'context_ids': ['c-1'], 
+            'key': 'instant_2024-12-31'
+        },
+        {
+            'type': 'instant', 
+            'date': '2024-12-31', 
+            'context_ids': ['c-8'], 
+            'key': 'instant_2024-12-31'
+        },
+        {
+            'type': 'duration',
+            'start_date': '2024-10-02',
+            'end_date': '2024-12-31', 
+            'days': 90, 
+            'period_type': 'Quarterly',
+            'context_ids': ['c-2', 'c-3', 'c-4'], 
+            'key': 'duration_2024-07-29_2024-12-31'
+        },
+        {
+            'type': 'duration', 
+            'start_date': '2023-12-31',
+            'end_date': '2024-12-31', 
+            'days': 365, 
+            'period_type': 'Annual',
+            'context_ids': ['c-5', 'c-6'], 
+            'key': 'duration_2024-01-01_2024-12-31'
+        }
+    ]
+
+@pytest.fixture
+def missing_periods():
+    """Missing duration period data."""
+    return [
+        {
+            'type': 'instant', 
+            'date': '2024-12-31', 
+            'context_ids': ['c-1'], 
+            'key': 'instant_2024-12-31'
+        }
+    ]
+
+@pytest.fixture
+def missing_context_ids():
+    """Valid period data for period testing."""
+    return [
+        {
+            'type': 'instant', 
+            'date': '2024-12-31', 
+            'context_ids': ['c-1'], 
+            'key': 'instant_2024-12-31'
+        },
+        {
+            'type': 'duration',
+            'start_date': '2024-10-02',
+            'end_date': '2024-12-31', 
+            'days': 90, 
+            'period_type': 'Quarterly',
+            'context_ids': [], 
+            'key': 'duration_2024-07-29_2024-12-31'
+        },
+        {
+            'type': 'duration',
+            'start_date': '2024-10-03',
+            'end_date': '2024-12-31', 
+            'days': 90, 
+            'period_type': 'Quarterly',
+            'context_ids': [], 
+            'key': 'duration_2024-07-29_2024-12-31'
+        },
+        {
+            'type': 'duration', 
+            'start_date': '2023-12-31',
+            'end_date': '2024-12-31', 
+            'days': 365, 
+            'period_type': 'Annual',
+            'context_ids': [], 
             'key': 'duration_2024-01-01_2024-12-31'
         }
     ]
@@ -518,6 +614,42 @@ def mock_xbrl_10_k(valid_periods):
     return xbrl
 
 @pytest.fixture
+def mock_xbrl_ten_q_missing_durations(missing_periods):
+    """Mock XBRL object with missing duration periods."""
+    xbrl = Mock()
+    xbrl.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-Q'
+    }
+    xbrl.period_of_report = '2024-12-31'
+    xbrl.reporting_periods = missing_periods
+    return xbrl
+
+@pytest.fixture
+def mock_xbrl_no_context(missing_context_ids):
+    """Mock XBRL object with missing context ids."""
+    xbrl = Mock()
+    xbrl.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-Q'
+    }
+    xbrl.period_of_report = '2024-12-31'
+    xbrl.reporting_periods = missing_context_ids
+    return xbrl
+
+@pytest.fixture
+def mock_xbrl_invalid(invalid_periods):
+    """Mock XBRL object with invalid period data."""
+    xbrl = Mock()
+    xbrl.entity_info = {
+        'ticker': 'AAPL',
+        'document_type': '10-Q'
+    }
+    xbrl.period_of_report = '2024-12-31'
+    xbrl.reporting_periods = invalid_periods
+    return xbrl
+
+@pytest.fixture
 def mock_filing():
     """Mock filing object with all required data."""
     filing = Mock()
@@ -534,6 +666,24 @@ def mock_xbrl_from_filing(mock_xbrl):
 def mock_xbrl_10_k_from_filing(mock_xbrl_10_k):
     """Mock the XBRL.from_filing class method."""
     with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_10_k) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_xbrl_10_q_missing(mock_xbrl_ten_q_missing_durations):
+    """Mock the XBRL.from_filing class method."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_ten_q_missing_durations) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_xbrl_10_q_no_context(mock_xbrl_no_context):
+    """Mock the XBRL.from_filing class method."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_no_context) as mock:
+        yield mock
+
+@pytest.fixture
+def mock_xbrl_ten_q_invalid(mock_xbrl_invalid):
+    """Mock the XBRL.from_filing class method."""
+    with patch('stock_lab.facts_normalizer.XBRL.from_filing', return_value=mock_xbrl_invalid) as mock:
         yield mock
 
 @pytest.fixture
@@ -632,14 +782,22 @@ def test_get_period_keys_ten_k(mock_filing, mock_xbrl_10_k_from_filing):
     """Test happy path for a 10-K"""
     normalizer_10k = XBRLFactsNormalizer(mock_filing)
 
-    assert normalizer_10k.annual_duration[0]['days'] == 365
+    assert normalizer_10k.annual_durations[0]['days'] == 365
 
 # TODO: Finish these
-def test_get_period_keys_missing_data():
-    assert 1 == 2
+def test_get_period_keys_missing_data(mock_filing, mock_xbrl_10_q_missing):
+    """Test that missing data raises MissingData exception."""
+    with pytest.raises(MissingDate):
+        normalizer_ten_q = XBRLFactsNormalizer(mock_filing)
 
-def test_get_period_keys_invalid_data():
-    assert 1 == 2
+def test_get_period_keys_missing_context(mock_filing, mock_xbrl_10_q_no_context):
+    """"""
+    with pytest.raises(FilingDataError):
+        normalizer = XBRLFactsNormalizer(mock_filing)
+
+def test_get_period_keys_invalid_data(mock_filing, mock_xbrl_ten_q_invalid):
+    with pytest.raises(InvalidDate):
+        normalizer = XBRLFactsNormalizer(mock_filing)
 
 # # -----------------------------------------------------------------------------
 # #                               Integration tests

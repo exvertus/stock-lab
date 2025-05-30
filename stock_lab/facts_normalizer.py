@@ -227,13 +227,21 @@ class XBRLFactsNormalizer:
         #   - Fallback logic for durations (try quarterly, then ytd, ttm, annual)
         self.instant_dict = get_matching_instant_data(
             self.xbrl.reporting_periods, self.report_end)
+        if len(self.instant_dict['context_ids']) < 1:
+            raise FilingDataError(f"Could not find any context ids for instant {self.instant_dict}")
 
         self.quarter_durations = get_matching_period_data(
                 self.xbrl.reporting_periods, self.report_end, 'Quarterly')
+        quarter_contexts = [id for d in self.quarter_durations for id in d['context_ids']]
+        if len(quarter_contexts) < 1:
+            raise FilingDataError(f"Could not find any context ids for Quarterly duration {self.quarter_durations}")
 
         if self.document_type == '10-K':
-            self.annual_duration = get_matching_period_data(
+            self.annual_durations = get_matching_period_data(
                 self.xbrl.reporting_periods, self.report_end, 'Annual')
+            annual_contexts = [id for d in self.annual_durations for id in d['context_ids']]
+            if len(annual_contexts) < 1:
+                raise FilingDataError(f"Could not find any context ids for Annual duration {self.annual_durations}")
         else:
             self.annual_duration = None
         
